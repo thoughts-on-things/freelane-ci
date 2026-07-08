@@ -3,6 +3,7 @@
 Freelane reads `.freelane.yml` by default.
 
 ```yaml
+$schema: ./schemas/freelane.schema.json
 version: 1
 
 defaults:
@@ -78,3 +79,7 @@ Optional:
 - `runner`
 
 `runner` on a job bypasses provider routing.
+
+## Schema
+
+The JSON Schema lives at [schemas/freelane.schema.json](../schemas/freelane.schema.json).

@@ -1,0 +1,174 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://freelane-ci.dev/schemas/freelane.schema.json",
+  "title": "Freelane CI config",
+  "type": "object",
+  "required": ["version", "providers", "jobs"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "version": {
+      "const": 1
+    },
+    "defaults": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "paid": {
+          "enum": ["avoid", "allow", "forbid"]
+        },
+        "reserve": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "fallback": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "mode": {
+              "const": "pre_schedule"
+            },
+            "providers": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "alerts": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "github_summary": {
+              "type": "boolean"
+            },
+            "github_warning": {
+              "type": "boolean"
+            },
+            "webhook_url": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "providers": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "$ref": "#/$defs/provider"
+      }
+    },
+    "jobs": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "$ref": "#/$defs/job"
+      }
+    }
+  },
+  "$defs": {
+    "runner": {
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        }
+      ]
+    },
+    "provider": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "free_minutes_per_month": {
+          "type": "number",
+          "minimum": 0
+        },
+        "free_credit_usd_per_month": {
+          "type": "number",
+          "minimum": 0
+        },
+        "unit_minutes_per_month": {
+          "type": "number",
+          "minimum": 0
+        },
+        "used_minutes": {
+          "type": "number",
+          "minimum": 0
+        },
+        "used_credit_usd": {
+          "type": "number",
+          "minimum": 0
+        },
+        "used_unit_minutes": {
+          "type": "number",
+          "minimum": 0
+        },
+        "runner": {
+          "$ref": "#/$defs/runner"
+        },
+        "profile": {
+          "type": "string",
+          "minLength": 1
+        },
+        "owner": {
+          "type": "string",
+          "minLength": 1
+        },
+        "scope": {
+          "enum": ["user", "org", "enterprise"]
+        }
+      }
+    },
+    "job": {
+      "type": "object",
+      "required": ["os"],
+      "additionalProperties": false,
+      "properties": {
+        "os": {
+          "enum": ["linux", "windows", "macos"]
+        },
+        "arch": {
+          "enum": ["x64", "arm64"]
+        },
+        "min_vcpu": {
+          "type": "number",
+          "minimum": 1
+        },
+        "estimate_minutes": {
+          "type": "number",
+          "minimum": 0
+        },
+        "providers": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        },
+        "runner": {
+          "$ref": "#/$defs/runner"
+        }
+      }
+    }
+  }
+}
