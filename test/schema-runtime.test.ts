@@ -24,4 +24,33 @@ describe("validateConfigFile", () => {
     expect(result.valid).toBe(false);
     expect(formatValidation(result, "text")).toContain("invalid");
   });
+
+  it("reports unknown provider references", () => {
+    const dir = mkdtempSync(join(tmpdir(), "freelane-schema-"));
+    const path = join(dir, ".freelane.yml");
+
+    writeFileSync(path, [
+      "version: 1",
+      "defaults:",
+      "  reserve:",
+      "    missing-reserve: 10",
+      "  fallback:",
+      "    providers: [missing-fallback]",
+      "providers:",
+      "  github: {}",
+      "jobs:",
+      "  test:",
+      "    os: linux",
+      "    providers: [github, missing-job]"
+    ].join("\n"));
+
+    const result = validateConfigFile(path);
+
+    expect(result.valid).toBe(false);
+    expect(result.issues).toEqual(expect.arrayContaining([
+      expect.objectContaining({ path: "/defaults/reserve/missing-reserve" }),
+      expect.objectContaining({ path: "/defaults/fallback/providers/0" }),
+      expect.objectContaining({ path: "/jobs/test/providers/1" })
+    ]));
+  });
 });

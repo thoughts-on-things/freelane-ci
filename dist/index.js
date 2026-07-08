@@ -642,14 +642,18 @@ function validateConfigFile(path = findConfigPath()) {
   const config = (0, import_yaml2.parse)((0, import_node_fs3.readFileSync)(path, "utf8"));
   const ajv = new import__.default({ allErrors: true });
   const validate = ajv.compile(freelane_schema_default);
-  const valid = validate(config);
-  return {
-    valid,
-    path,
-    issues: (validate.errors ?? []).map((error) => ({
+  const schemaValid = validate(config);
+  const issues = [
+    ...(validate.errors ?? []).map((error) => ({
       path: error.instancePath || "/",
       message: error.message ?? "invalid value"
-    }))
+    })),
+    ...semanticIssues(config)
+  ];
+  return {
+    valid: schemaValid && issues.length === 0,
+    path,
+    issues
   };
 }
 function formatValidation(result, format) {
@@ -661,6 +665,48 @@ function formatValidation(result, format) {
     `invalid ${result.path}`,
     ...result.issues.map((issue) => `- ${issue.path} ${issue.message}`)
   ].join("\n") + "\n";
+}
+function semanticIssues(config) {
+  if (!isRecord2(config) || !isRecord2(config.providers) || !isRecord2(config.jobs)) return [];
+  const issues = [];
+  const providerIds = new Set(Object.keys(config.providers));
+  if (isRecord2(config.defaults)) {
+    if (isRecord2(config.defaults.reserve)) {
+      for (const providerId of Object.keys(config.defaults.reserve)) {
+        if (!providerIds.has(providerId)) {
+          issues.push({
+            path: pointer("defaults", "reserve", providerId),
+            message: `references unknown provider "${providerId}"`
+          });
+        }
+      }
+    }
+    if (isRecord2(config.defaults.fallback)) {
+      issues.push(...providerReferenceIssues(config.defaults.fallback.providers, pointer("defaults", "fallback", "providers"), providerIds));
+    }
+  }
+  for (const [jobId, job] of Object.entries(config.jobs)) {
+    if (isRecord2(job)) {
+      issues.push(...providerReferenceIssues(job.providers, pointer("jobs", jobId, "providers"), providerIds));
+    }
+  }
+  return issues;
+}
+function providerReferenceIssues(value, path, providerIds) {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((providerId, index) => {
+    if (typeof providerId !== "string" || providerIds.has(providerId)) return [];
+    return [{
+      path: `${path}/${index}`,
+      message: `references unknown provider "${providerId}"`
+    }];
+  });
+}
+function pointer(...segments) {
+  return `/${segments.map((segment) => segment.replace(/~/g, "~0").replace(/\//g, "~1")).join("/")}`;
+}
+function isRecord2(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {

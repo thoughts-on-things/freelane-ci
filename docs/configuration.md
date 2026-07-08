@@ -89,3 +89,6 @@ Validate a config:
 ```bash
 freelane config validate --config .freelane.yml
 ```
+
+Validation checks both schema shape and provider references in jobs, reserves,
+and fallbacks.
