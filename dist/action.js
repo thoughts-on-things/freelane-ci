@@ -216,6 +216,31 @@ function nearestVcpu(min = 2, sizes = VCPU_SIZES) {
   return sizes.find((size) => size >= min) ?? sizes[sizes.length - 1];
 }
 
+// src/quota.ts
+function quotaFor(provider, unit, reserve = 0) {
+  const quota = rawQuotaFor(provider, unit);
+  return {
+    ...quota,
+    available: quota.total - quota.used - reserve
+  };
+}
+function rawQuotaFor(provider, unit) {
+  if (provider.free_credit_usd_per_month !== void 0) {
+    return { total: provider.free_credit_usd_per_month, used: provider.used_credit_usd ?? 0 };
+  }
+  if (provider.free_minutes_per_month !== void 0) {
+    return { total: provider.free_minutes_per_month, used: provider.used_minutes ?? 0 };
+  }
+  if (provider.unit_minutes_per_month !== void 0 || unit === "unit_minutes") {
+    return { total: provider.unit_minutes_per_month ?? 0, used: provider.used_unit_minutes ?? 0 };
+  }
+  return { total: Number.POSITIVE_INFINITY, used: 0 };
+}
+function roundQuota(value) {
+  if (!Number.isFinite(value)) return value;
+  return Math.round(value * 1e4) / 1e4;
+}
+
 // src/resolve.ts
 function resolveFreelane(config, jobId) {
   const job = config.jobs[jobId];
@@ -243,9 +268,9 @@ function candidateFor(config, providerId, job) {
   if (!provider || provider.enabled === false) return void 0;
   const option2 = getRunnerOption(providerId, provider, job);
   if (!option2) return void 0;
-  const quota = quotaFor(provider, option2.quotaUnit);
   const reserve = config.defaults?.reserve?.[providerId] ?? 0;
-  const available = quota.total - quota.used - reserve;
+  const quota = quotaFor(provider, option2.quotaUnit, reserve);
+  const available = quota.available;
   const paidRequired = quota.total !== Number.POSITIVE_INFINITY && available < option2.quotaBurn;
   return { option: option2, available, paidRequired };
 }
@@ -259,18 +284,6 @@ function fallbackCandidate(config, job, candidates) {
   }
   return void 0;
 }
-function quotaFor(provider, unit) {
-  if (provider.free_credit_usd_per_month !== void 0) {
-    return { total: provider.free_credit_usd_per_month, used: provider.used_credit_usd ?? 0 };
-  }
-  if (provider.free_minutes_per_month !== void 0) {
-    return { total: provider.free_minutes_per_month, used: provider.used_minutes ?? 0 };
-  }
-  if (provider.unit_minutes_per_month !== void 0 || unit === "unit_minutes") {
-    return { total: provider.unit_minutes_per_month ?? 0, used: provider.used_unit_minutes ?? 0 };
-  }
-  return { total: Number.POSITIVE_INFINITY, used: 0 };
-}
 function decision(jobId, candidate, reason) {
   const runner = candidate.option.runner;
   return {
@@ -281,8 +294,8 @@ function decision(jobId, candidate, reason) {
     reason,
     paidRequired: candidate.paidRequired,
     quotaUnit: candidate.option.quotaUnit,
-    quotaBurn: round(candidate.option.quotaBurn),
-    available: round(candidate.available)
+    quotaBurn: roundQuota(candidate.option.quotaBurn),
+    available: roundQuota(candidate.available)
   };
 }
 function directDecision(jobId, job) {
@@ -298,10 +311,6 @@ function directDecision(jobId, job) {
     quotaBurn: 0,
     available: Number.POSITIVE_INFINITY
   };
-}
-function round(value) {
-  if (!Number.isFinite(value)) return value;
-  return Math.round(value * 1e4) / 1e4;
 }
 
 // src/action.ts

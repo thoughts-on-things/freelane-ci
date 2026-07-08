@@ -1,5 +1,6 @@
-import type { Candidate, FreelaneConfig, JobConfig, ProviderConfig, RoutingDecision } from "./types";
+import type { Candidate, FreelaneConfig, JobConfig, RoutingDecision } from "./types";
 import { getRunnerOption } from "./providers";
+import { quotaFor, roundQuota } from "./quota";
 
 export function resolveFreelane(config: FreelaneConfig, jobId: string): RoutingDecision {
   const job = config.jobs[jobId];
@@ -39,9 +40,9 @@ function candidateFor(config: FreelaneConfig, providerId: string, job: JobConfig
   const option = getRunnerOption(providerId, provider, job);
   if (!option) return undefined;
 
-  const quota = quotaFor(provider, option.quotaUnit);
   const reserve = config.defaults?.reserve?.[providerId] ?? 0;
-  const available = quota.total - quota.used - reserve;
+  const quota = quotaFor(provider, option.quotaUnit, reserve);
+  const available = quota.available;
   const paidRequired = quota.total !== Number.POSITIVE_INFINITY && available < option.quotaBurn;
 
   return { option, available, paidRequired };
@@ -58,19 +59,6 @@ function fallbackCandidate(config: FreelaneConfig, job: JobConfig, candidates: C
   return undefined;
 }
 
-function quotaFor(provider: ProviderConfig, unit: Candidate["option"]["quotaUnit"]): { total: number; used: number } {
-  if (provider.free_credit_usd_per_month !== undefined) {
-    return { total: provider.free_credit_usd_per_month, used: provider.used_credit_usd ?? 0 };
-  }
-  if (provider.free_minutes_per_month !== undefined) {
-    return { total: provider.free_minutes_per_month, used: provider.used_minutes ?? 0 };
-  }
-  if (provider.unit_minutes_per_month !== undefined || unit === "unit_minutes") {
-    return { total: provider.unit_minutes_per_month ?? 0, used: provider.used_unit_minutes ?? 0 };
-  }
-  return { total: Number.POSITIVE_INFINITY, used: 0 };
-}
-
 function decision(jobId: string, candidate: Candidate, reason: string): RoutingDecision {
   const runner = candidate.option.runner;
   return {
@@ -81,8 +69,8 @@ function decision(jobId: string, candidate: Candidate, reason: string): RoutingD
     reason,
     paidRequired: candidate.paidRequired,
     quotaUnit: candidate.option.quotaUnit,
-    quotaBurn: round(candidate.option.quotaBurn),
-    available: round(candidate.available)
+    quotaBurn: roundQuota(candidate.option.quotaBurn),
+    available: roundQuota(candidate.available)
   };
 }
 
@@ -99,9 +87,4 @@ function directDecision(jobId: string, job: JobConfig): RoutingDecision {
     quotaBurn: 0,
     available: Number.POSITIVE_INFINITY
   };
-}
-
-function round(value: number): number {
-  if (!Number.isFinite(value)) return value;
-  return Math.round(value * 10000) / 10000;
 }

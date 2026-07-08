@@ -25,6 +25,12 @@ GitHub output format:
 node dist/cli.js resolve --config examples/freelane.yml --job test-linux --format github-output
 ```
 
+Check configured provider routing:
+
+```bash
+node dist/cli.js providers doctor --config examples/freelane.yml
+```
+
 ## Use In GitHub Actions
 
 Freelane must run before the job it routes because GitHub chooses a runner before

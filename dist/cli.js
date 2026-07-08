@@ -56,22 +56,6 @@ function isRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-// src/format.ts
-function formatDecision(decision2, format) {
-  if (format === "json") return `${JSON.stringify(decision2, null, 2)}
-`;
-  if (format === "github-output") {
-    return [
-      `runs_on=${decision2.runsOnJson}`,
-      `provider=${decision2.provider}`,
-      `runner=${JSON.stringify(decision2.runner)}`,
-      `reason=${decision2.reason}`
-    ].join("\n") + "\n";
-  }
-  return `${decision2.provider} ${decision2.runsOnJson} - ${decision2.reason}
-`;
-}
-
 // src/providers.ts
 var VCPU_SIZES = [2, 4, 8, 16, 32];
 var providerFactories = {
@@ -208,6 +192,102 @@ function nearestVcpu(min = 2, sizes = VCPU_SIZES) {
   return sizes.find((size) => size >= min) ?? sizes[sizes.length - 1];
 }
 
+// src/quota.ts
+function quotaFor(provider, unit, reserve = 0) {
+  const quota = rawQuotaFor(provider, unit);
+  return {
+    ...quota,
+    available: quota.total - quota.used - reserve
+  };
+}
+function rawQuotaFor(provider, unit) {
+  if (provider.free_credit_usd_per_month !== void 0) {
+    return { total: provider.free_credit_usd_per_month, used: provider.used_credit_usd ?? 0 };
+  }
+  if (provider.free_minutes_per_month !== void 0) {
+    return { total: provider.free_minutes_per_month, used: provider.used_minutes ?? 0 };
+  }
+  if (provider.unit_minutes_per_month !== void 0 || unit === "unit_minutes") {
+    return { total: provider.unit_minutes_per_month ?? 0, used: provider.used_unit_minutes ?? 0 };
+  }
+  return { total: Number.POSITIVE_INFINITY, used: 0 };
+}
+function displayUnit(unit) {
+  if (unit === "usd") return "usd";
+  if (unit === "unit_minutes") return "unit-min";
+  if (unit === "minutes") return "min";
+  return "unlimited";
+}
+function roundQuota(value) {
+  if (!Number.isFinite(value)) return value;
+  return Math.round(value * 1e4) / 1e4;
+}
+
+// src/doctor.ts
+function doctorConfig(config) {
+  const entries = [];
+  for (const [jobId, job] of Object.entries(config.jobs)) {
+    const providerIds = job.providers ?? Object.keys(config.providers);
+    for (const providerId of providerIds) {
+      const provider = config.providers[providerId];
+      if (!provider) {
+        entries.push({ job: jobId, provider: providerId, status: "missing", message: "provider is not configured" });
+        continue;
+      }
+      if (provider.enabled === false) {
+        entries.push({ job: jobId, provider: providerId, status: "disabled", message: "provider is disabled" });
+        continue;
+      }
+      const option2 = getRunnerOption(providerId, provider, job);
+      if (!option2) {
+        entries.push({ job: jobId, provider: providerId, status: "unsupported", message: "no runner matches job requirements" });
+        continue;
+      }
+      const reserve = config.defaults?.reserve?.[providerId] ?? 0;
+      const quota = quotaFor(provider, option2.quotaUnit, reserve);
+      const quotaBurn = roundQuota(option2.quotaBurn);
+      const available = roundQuota(quota.available);
+      const status = quota.total !== Number.POSITIVE_INFINITY && quota.available < option2.quotaBurn ? "quota-low" : "ok";
+      const unit = displayUnit(option2.quotaUnit);
+      entries.push({
+        job: jobId,
+        provider: providerId,
+        status,
+        runner: option2.runner,
+        quotaUnit: option2.quotaUnit,
+        quotaBurn,
+        available,
+        message: status === "ok" ? `burns ${quotaBurn} ${unit}; ${available} available` : `needs ${quotaBurn} ${unit}; ${available} available`
+      });
+    }
+  }
+  return { entries };
+}
+function formatDoctor(report, format) {
+  if (format === "json") return `${JSON.stringify(report, null, 2)}
+`;
+  return report.entries.map((entry) => {
+    const runner = entry.runner ? JSON.stringify(entry.runner) : "-";
+    return `${entry.status}	${entry.job}	${entry.provider}	${runner}	${entry.message}`;
+  }).join("\n") + "\n";
+}
+
+// src/format.ts
+function formatDecision(decision2, format) {
+  if (format === "json") return `${JSON.stringify(decision2, null, 2)}
+`;
+  if (format === "github-output") {
+    return [
+      `runs_on=${decision2.runsOnJson}`,
+      `provider=${decision2.provider}`,
+      `runner=${JSON.stringify(decision2.runner)}`,
+      `reason=${decision2.reason}`
+    ].join("\n") + "\n";
+  }
+  return `${decision2.provider} ${decision2.runsOnJson} - ${decision2.reason}
+`;
+}
+
 // src/resolve.ts
 function resolveFreelane(config, jobId) {
   const job = config.jobs[jobId];
@@ -235,9 +315,9 @@ function candidateFor(config, providerId, job) {
   if (!provider || provider.enabled === false) return void 0;
   const option2 = getRunnerOption(providerId, provider, job);
   if (!option2) return void 0;
-  const quota = quotaFor(provider, option2.quotaUnit);
   const reserve = config.defaults?.reserve?.[providerId] ?? 0;
-  const available = quota.total - quota.used - reserve;
+  const quota = quotaFor(provider, option2.quotaUnit, reserve);
+  const available = quota.available;
   const paidRequired = quota.total !== Number.POSITIVE_INFINITY && available < option2.quotaBurn;
   return { option: option2, available, paidRequired };
 }
@@ -251,18 +331,6 @@ function fallbackCandidate(config, job, candidates) {
   }
   return void 0;
 }
-function quotaFor(provider, unit) {
-  if (provider.free_credit_usd_per_month !== void 0) {
-    return { total: provider.free_credit_usd_per_month, used: provider.used_credit_usd ?? 0 };
-  }
-  if (provider.free_minutes_per_month !== void 0) {
-    return { total: provider.free_minutes_per_month, used: provider.used_minutes ?? 0 };
-  }
-  if (provider.unit_minutes_per_month !== void 0 || unit === "unit_minutes") {
-    return { total: provider.unit_minutes_per_month ?? 0, used: provider.used_unit_minutes ?? 0 };
-  }
-  return { total: Number.POSITIVE_INFINITY, used: 0 };
-}
 function decision(jobId, candidate, reason) {
   const runner = candidate.option.runner;
   return {
@@ -273,8 +341,8 @@ function decision(jobId, candidate, reason) {
     reason,
     paidRequired: candidate.paidRequired,
     quotaUnit: candidate.option.quotaUnit,
-    quotaBurn: round(candidate.option.quotaBurn),
-    available: round(candidate.available)
+    quotaBurn: roundQuota(candidate.option.quotaBurn),
+    available: roundQuota(candidate.available)
   };
 }
 function directDecision(jobId, job) {
@@ -291,27 +359,32 @@ function directDecision(jobId, job) {
     available: Number.POSITIVE_INFINITY
   };
 }
-function round(value) {
-  if (!Number.isFinite(value)) return value;
-  return Math.round(value * 1e4) / 1e4;
-}
 
 // src/cli.ts
 function main() {
   const args = parseArgs(process.argv.slice(2));
-  if (args.command !== "resolve") {
-    usage(0);
+  if (args.command === "resolve") {
+    if (!args.job) throw new Error("missing required --job");
+    const config = loadConfig(args.config);
+    const decision2 = resolveFreelane(config, args.job);
+    process.stdout.write(formatDecision(decision2, args.format));
+    return;
   }
-  if (!args.job) {
-    throw new Error("missing required --job");
+  if (args.command === "providers" && args.subcommand === "doctor") {
+    const config = loadConfig(args.config);
+    process.stdout.write(formatDoctor(doctorConfig(config), args.format));
+    return;
   }
-  const config = loadConfig(args.config);
-  const decision2 = resolveFreelane(config, args.job);
-  process.stdout.write(formatDecision(decision2, args.format));
+  usage(0);
 }
 function parseArgs(argv) {
   const args = { command: argv[0], format: "text" };
-  for (let i = 1; i < argv.length; i += 1) {
+  let start = 1;
+  if (args.command === "providers") {
+    args.subcommand = argv[1];
+    start = 2;
+  }
+  for (let i = start; i < argv.length; i += 1) {
     const value = argv[i];
     if (value === "--help" || value === "-h") usage(0);
     if (value === "--config") args.config = argv[++i];
@@ -326,7 +399,11 @@ function parseFormat(value) {
   throw new Error(`unsupported format: ${value}`);
 }
 function usage(code) {
-  process.stdout.write("Usage: freelane resolve --job <job> [--config .freelane.yml] [--format text|json|github-output]\n");
+  process.stdout.write([
+    "Usage:",
+    "  freelane resolve --job <job> [--config .freelane.yml] [--format text|json|github-output]",
+    "  freelane providers doctor [--config .freelane.yml] [--format text|json]"
+  ].join("\n") + "\n");
   process.exit(code);
 }
 try {

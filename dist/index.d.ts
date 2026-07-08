@@ -65,6 +65,23 @@ interface RoutingDecision {
     available: number;
 }
 
+type DoctorStatus = "ok" | "disabled" | "missing" | "unsupported" | "quota-low";
+interface DoctorEntry {
+    job: string;
+    provider: string;
+    status: DoctorStatus;
+    runner?: string | string[];
+    quotaUnit?: QuotaUnit;
+    quotaBurn?: number;
+    available?: number;
+    message: string;
+}
+interface DoctorReport {
+    entries: DoctorEntry[];
+}
+declare function doctorConfig(config: FreelaneConfig): DoctorReport;
+declare function formatDoctor(report: DoctorReport, format: string): string;
+
 declare function findConfigPath(cwd?: string): string;
 declare function loadConfig(path?: string): FreelaneConfig;
 
@@ -74,6 +91,15 @@ type ProviderFactory = (provider: ProviderConfig, job: JobConfig) => RunnerOptio
 declare const providerFactories: Record<string, ProviderFactory>;
 declare function getRunnerOption(providerId: string, provider: ProviderConfig, job: JobConfig): RunnerOption | undefined;
 
+interface QuotaSnapshot {
+    total: number;
+    used: number;
+    available: number;
+}
+declare function quotaFor(provider: ProviderConfig, unit: QuotaUnit, reserve?: number): QuotaSnapshot;
+declare function displayUnit(unit: QuotaUnit): string;
+declare function roundQuota(value: number): number;
+
 declare function resolveFreelane(config: FreelaneConfig, jobId: string): RoutingDecision;
 
-export { type Candidate, type DefaultsConfig, type FreelaneConfig, type JobConfig, type PaidPolicy, type ProviderConfig, type QuotaUnit, type RoutingDecision, type RunnerArch, type RunnerOption, type RunnerOs, findConfigPath, formatDecision, getRunnerOption, loadConfig, providerFactories, resolveFreelane };
+export { type Candidate, type DefaultsConfig, type FreelaneConfig, type JobConfig, type PaidPolicy, type ProviderConfig, type QuotaUnit, type RoutingDecision, type RunnerArch, type RunnerOption, type RunnerOs, displayUnit, doctorConfig, findConfigPath, formatDecision, formatDoctor, getRunnerOption, loadConfig, providerFactories, quotaFor, resolveFreelane, roundQuota };

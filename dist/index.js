@@ -20,85 +20,19 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 // src/index.ts
 var index_exports = {};
 __export(index_exports, {
+  displayUnit: () => displayUnit,
+  doctorConfig: () => doctorConfig,
   findConfigPath: () => findConfigPath,
   formatDecision: () => formatDecision,
+  formatDoctor: () => formatDoctor,
   getRunnerOption: () => getRunnerOption,
   loadConfig: () => loadConfig,
   providerFactories: () => providerFactories,
-  resolveFreelane: () => resolveFreelane
+  quotaFor: () => quotaFor,
+  resolveFreelane: () => resolveFreelane,
+  roundQuota: () => roundQuota
 });
 module.exports = __toCommonJS(index_exports);
-
-// src/config.ts
-var import_node_fs = require("fs");
-var import_node_path = require("path");
-var import_yaml = require("yaml");
-var DEFAULT_CONFIGS = [".freelane.yml", ".freelane.yaml", "freelane.yml", "freelane.yaml"];
-function findConfigPath(cwd = process.cwd()) {
-  for (const name of DEFAULT_CONFIGS) {
-    const candidate = (0, import_node_path.resolve)(cwd, name);
-    if ((0, import_node_fs.existsSync)(candidate)) return candidate;
-  }
-  return (0, import_node_path.resolve)(cwd, ".freelane.yml");
-}
-function loadConfig(path = findConfigPath()) {
-  const raw = (0, import_node_fs.readFileSync)(path, "utf8");
-  const config = (0, import_yaml.parse)(raw);
-  validateConfig(config, path);
-  return config;
-}
-function validateConfig(config, path) {
-  if (!config || config.version !== 1) {
-    throw new Error(`${path}: expected version: 1`);
-  }
-  if (!isRecord(config.providers)) {
-    throw new Error(`${path}: providers must be an object`);
-  }
-  if (!isRecord(config.jobs)) {
-    throw new Error(`${path}: jobs must be an object`);
-  }
-  for (const [id, provider] of Object.entries(config.providers)) {
-    validateProvider(path, id, provider);
-  }
-  for (const [id, job] of Object.entries(config.jobs)) {
-    validateJob(path, id, job);
-  }
-}
-function validateProvider(path, id, provider) {
-  if (!isRecord(provider)) {
-    throw new Error(`${path}: providers.${id} must be an object`);
-  }
-}
-function validateJob(path, id, job) {
-  if (!isRecord(job)) {
-    throw new Error(`${path}: jobs.${id} must be an object`);
-  }
-  if (!["linux", "windows", "macos"].includes(job.os)) {
-    throw new Error(`${path}: jobs.${id}.os must be linux, windows, or macos`);
-  }
-  if (job.arch && !["x64", "arm64"].includes(job.arch)) {
-    throw new Error(`${path}: jobs.${id}.arch must be x64 or arm64`);
-  }
-}
-function isRecord(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-// src/format.ts
-function formatDecision(decision2, format) {
-  if (format === "json") return `${JSON.stringify(decision2, null, 2)}
-`;
-  if (format === "github-output") {
-    return [
-      `runs_on=${decision2.runsOnJson}`,
-      `provider=${decision2.provider}`,
-      `runner=${JSON.stringify(decision2.runner)}`,
-      `reason=${decision2.reason}`
-    ].join("\n") + "\n";
-  }
-  return `${decision2.provider} ${decision2.runsOnJson} - ${decision2.reason}
-`;
-}
 
 // src/providers.ts
 var VCPU_SIZES = [2, 4, 8, 16, 32];
@@ -236,6 +170,157 @@ function nearestVcpu(min = 2, sizes = VCPU_SIZES) {
   return sizes.find((size) => size >= min) ?? sizes[sizes.length - 1];
 }
 
+// src/quota.ts
+function quotaFor(provider, unit, reserve = 0) {
+  const quota = rawQuotaFor(provider, unit);
+  return {
+    ...quota,
+    available: quota.total - quota.used - reserve
+  };
+}
+function rawQuotaFor(provider, unit) {
+  if (provider.free_credit_usd_per_month !== void 0) {
+    return { total: provider.free_credit_usd_per_month, used: provider.used_credit_usd ?? 0 };
+  }
+  if (provider.free_minutes_per_month !== void 0) {
+    return { total: provider.free_minutes_per_month, used: provider.used_minutes ?? 0 };
+  }
+  if (provider.unit_minutes_per_month !== void 0 || unit === "unit_minutes") {
+    return { total: provider.unit_minutes_per_month ?? 0, used: provider.used_unit_minutes ?? 0 };
+  }
+  return { total: Number.POSITIVE_INFINITY, used: 0 };
+}
+function displayUnit(unit) {
+  if (unit === "usd") return "usd";
+  if (unit === "unit_minutes") return "unit-min";
+  if (unit === "minutes") return "min";
+  return "unlimited";
+}
+function roundQuota(value) {
+  if (!Number.isFinite(value)) return value;
+  return Math.round(value * 1e4) / 1e4;
+}
+
+// src/doctor.ts
+function doctorConfig(config) {
+  const entries = [];
+  for (const [jobId, job] of Object.entries(config.jobs)) {
+    const providerIds = job.providers ?? Object.keys(config.providers);
+    for (const providerId of providerIds) {
+      const provider = config.providers[providerId];
+      if (!provider) {
+        entries.push({ job: jobId, provider: providerId, status: "missing", message: "provider is not configured" });
+        continue;
+      }
+      if (provider.enabled === false) {
+        entries.push({ job: jobId, provider: providerId, status: "disabled", message: "provider is disabled" });
+        continue;
+      }
+      const option2 = getRunnerOption(providerId, provider, job);
+      if (!option2) {
+        entries.push({ job: jobId, provider: providerId, status: "unsupported", message: "no runner matches job requirements" });
+        continue;
+      }
+      const reserve = config.defaults?.reserve?.[providerId] ?? 0;
+      const quota = quotaFor(provider, option2.quotaUnit, reserve);
+      const quotaBurn = roundQuota(option2.quotaBurn);
+      const available = roundQuota(quota.available);
+      const status = quota.total !== Number.POSITIVE_INFINITY && quota.available < option2.quotaBurn ? "quota-low" : "ok";
+      const unit = displayUnit(option2.quotaUnit);
+      entries.push({
+        job: jobId,
+        provider: providerId,
+        status,
+        runner: option2.runner,
+        quotaUnit: option2.quotaUnit,
+        quotaBurn,
+        available,
+        message: status === "ok" ? `burns ${quotaBurn} ${unit}; ${available} available` : `needs ${quotaBurn} ${unit}; ${available} available`
+      });
+    }
+  }
+  return { entries };
+}
+function formatDoctor(report, format) {
+  if (format === "json") return `${JSON.stringify(report, null, 2)}
+`;
+  return report.entries.map((entry) => {
+    const runner = entry.runner ? JSON.stringify(entry.runner) : "-";
+    return `${entry.status}	${entry.job}	${entry.provider}	${runner}	${entry.message}`;
+  }).join("\n") + "\n";
+}
+
+// src/config.ts
+var import_node_fs = require("fs");
+var import_node_path = require("path");
+var import_yaml = require("yaml");
+var DEFAULT_CONFIGS = [".freelane.yml", ".freelane.yaml", "freelane.yml", "freelane.yaml"];
+function findConfigPath(cwd = process.cwd()) {
+  for (const name of DEFAULT_CONFIGS) {
+    const candidate = (0, import_node_path.resolve)(cwd, name);
+    if ((0, import_node_fs.existsSync)(candidate)) return candidate;
+  }
+  return (0, import_node_path.resolve)(cwd, ".freelane.yml");
+}
+function loadConfig(path = findConfigPath()) {
+  const raw = (0, import_node_fs.readFileSync)(path, "utf8");
+  const config = (0, import_yaml.parse)(raw);
+  validateConfig(config, path);
+  return config;
+}
+function validateConfig(config, path) {
+  if (!config || config.version !== 1) {
+    throw new Error(`${path}: expected version: 1`);
+  }
+  if (!isRecord(config.providers)) {
+    throw new Error(`${path}: providers must be an object`);
+  }
+  if (!isRecord(config.jobs)) {
+    throw new Error(`${path}: jobs must be an object`);
+  }
+  for (const [id, provider] of Object.entries(config.providers)) {
+    validateProvider(path, id, provider);
+  }
+  for (const [id, job] of Object.entries(config.jobs)) {
+    validateJob(path, id, job);
+  }
+}
+function validateProvider(path, id, provider) {
+  if (!isRecord(provider)) {
+    throw new Error(`${path}: providers.${id} must be an object`);
+  }
+}
+function validateJob(path, id, job) {
+  if (!isRecord(job)) {
+    throw new Error(`${path}: jobs.${id} must be an object`);
+  }
+  if (!["linux", "windows", "macos"].includes(job.os)) {
+    throw new Error(`${path}: jobs.${id}.os must be linux, windows, or macos`);
+  }
+  if (job.arch && !["x64", "arm64"].includes(job.arch)) {
+    throw new Error(`${path}: jobs.${id}.arch must be x64 or arm64`);
+  }
+}
+function isRecord(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+// src/format.ts
+function formatDecision(decision2, format) {
+  if (format === "json") return `${JSON.stringify(decision2, null, 2)}
+`;
+  if (format === "github-output") {
+    return [
+      `runs_on=${decision2.runsOnJson}`,
+      `provider=${decision2.provider}`,
+      `runner=${JSON.stringify(decision2.runner)}`,
+      `reason=${decision2.reason}`
+    ].join("\n") + "\n";
+  }
+  return `${decision2.provider} ${decision2.runsOnJson} - ${decision2.reason}
+`;
+}
+
 // src/resolve.ts
 function resolveFreelane(config, jobId) {
   const job = config.jobs[jobId];
@@ -263,9 +348,9 @@ function candidateFor(config, providerId, job) {
   if (!provider || provider.enabled === false) return void 0;
   const option2 = getRunnerOption(providerId, provider, job);
   if (!option2) return void 0;
-  const quota = quotaFor(provider, option2.quotaUnit);
   const reserve = config.defaults?.reserve?.[providerId] ?? 0;
-  const available = quota.total - quota.used - reserve;
+  const quota = quotaFor(provider, option2.quotaUnit, reserve);
+  const available = quota.available;
   const paidRequired = quota.total !== Number.POSITIVE_INFINITY && available < option2.quotaBurn;
   return { option: option2, available, paidRequired };
 }
@@ -279,18 +364,6 @@ function fallbackCandidate(config, job, candidates) {
   }
   return void 0;
 }
-function quotaFor(provider, unit) {
-  if (provider.free_credit_usd_per_month !== void 0) {
-    return { total: provider.free_credit_usd_per_month, used: provider.used_credit_usd ?? 0 };
-  }
-  if (provider.free_minutes_per_month !== void 0) {
-    return { total: provider.free_minutes_per_month, used: provider.used_minutes ?? 0 };
-  }
-  if (provider.unit_minutes_per_month !== void 0 || unit === "unit_minutes") {
-    return { total: provider.unit_minutes_per_month ?? 0, used: provider.used_unit_minutes ?? 0 };
-  }
-  return { total: Number.POSITIVE_INFINITY, used: 0 };
-}
 function decision(jobId, candidate, reason) {
   const runner = candidate.option.runner;
   return {
@@ -301,8 +374,8 @@ function decision(jobId, candidate, reason) {
     reason,
     paidRequired: candidate.paidRequired,
     quotaUnit: candidate.option.quotaUnit,
-    quotaBurn: round(candidate.option.quotaBurn),
-    available: round(candidate.available)
+    quotaBurn: roundQuota(candidate.option.quotaBurn),
+    available: roundQuota(candidate.available)
   };
 }
 function directDecision(jobId, job) {
@@ -319,16 +392,17 @@ function directDecision(jobId, job) {
     available: Number.POSITIVE_INFINITY
   };
 }
-function round(value) {
-  if (!Number.isFinite(value)) return value;
-  return Math.round(value * 1e4) / 1e4;
-}
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
+  displayUnit,
+  doctorConfig,
   findConfigPath,
   formatDecision,
+  formatDoctor,
   getRunnerOption,
   loadConfig,
   providerFactories,
-  resolveFreelane
+  quotaFor,
+  resolveFreelane,
+  roundQuota
 });
