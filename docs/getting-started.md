@@ -9,6 +9,12 @@ npm run build
 
 ## Resolve A Job Locally
 
+Create a starter config:
+
+```bash
+node dist/cli.js init --output .freelane.yml
+```
+
 ```bash
 node dist/cli.js resolve --config examples/freelane.yml --job test-linux
 ```

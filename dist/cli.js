@@ -288,6 +288,55 @@ function formatDecision(decision2, format) {
 `;
 }
 
+// src/init.ts
+var import_node_fs2 = require("fs");
+var import_node_path2 = require("path");
+function starterConfig() {
+  return [
+    "$schema: ./schemas/freelane.schema.json",
+    "version: 1",
+    "",
+    "defaults:",
+    "  paid: avoid",
+    "  fallback:",
+    "    mode: pre_schedule",
+    "    providers: [github]",
+    "",
+    "providers:",
+    "  github:",
+    "    enabled: true",
+    "  blacksmith:",
+    "    enabled: false",
+    "    free_minutes_per_month: 3000",
+    "  ubicloud:",
+    "    enabled: false",
+    "    free_credit_usd_per_month: 2",
+    "  warpbuild:",
+    "    enabled: false",
+    "    free_credit_usd_per_month: 10",
+    "  namespace:",
+    "    enabled: false",
+    "    unit_minutes_per_month: 100000",
+    "",
+    "jobs:",
+    "  test-linux:",
+    "    os: linux",
+    "    arch: x64",
+    "    min_vcpu: 2",
+    "    estimate_minutes: 8",
+    "    providers: [blacksmith, ubicloud, warpbuild, github]",
+    ""
+  ].join("\n");
+}
+function writeStarterConfig(options = {}) {
+  const output = (0, import_node_path2.resolve)(options.cwd ?? process.cwd(), options.output ?? ".freelane.yml");
+  if ((0, import_node_fs2.existsSync)(output) && !options.force) {
+    throw new Error(`${output} already exists; pass --force to overwrite`);
+  }
+  (0, import_node_fs2.writeFileSync)(output, starterConfig(), "utf8");
+  return output;
+}
+
 // src/resolve.ts
 function resolveFreelane(config, jobId) {
   const job = config.jobs[jobId];
@@ -375,6 +424,12 @@ function main() {
     process.stdout.write(formatDoctor(doctorConfig(config), args.format));
     return;
   }
+  if (args.command === "init") {
+    const output = writeStarterConfig({ output: args.output, force: args.force });
+    process.stdout.write(`created ${output}
+`);
+    return;
+  }
   usage(0);
 }
 function parseArgs(argv) {
@@ -388,7 +443,9 @@ function parseArgs(argv) {
     const value = argv[i];
     if (value === "--help" || value === "-h") usage(0);
     if (value === "--config") args.config = argv[++i];
+    else if (value === "--force") args.force = true;
     else if (value === "--job") args.job = argv[++i];
+    else if (value === "--output") args.output = argv[++i];
     else if (value === "--format") args.format = parseFormat(argv[++i]);
     else throw new Error(`unknown argument: ${value}`);
   }
@@ -401,6 +458,7 @@ function parseFormat(value) {
 function usage(code) {
   process.stdout.write([
     "Usage:",
+    "  freelane init [--output .freelane.yml] [--force]",
     "  freelane resolve --job <job> [--config .freelane.yml] [--format text|json|github-output]",
     "  freelane providers doctor [--config .freelane.yml] [--format text|json]"
   ].join("\n") + "\n");

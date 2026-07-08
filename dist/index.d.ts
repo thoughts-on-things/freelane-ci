@@ -87,6 +87,14 @@ declare function loadConfig(path?: string): FreelaneConfig;
 
 declare function formatDecision(decision: RoutingDecision, format: string): string;
 
+interface InitOptions {
+    output?: string;
+    force?: boolean;
+    cwd?: string;
+}
+declare function starterConfig(): string;
+declare function writeStarterConfig(options?: InitOptions): string;
+
 type ProviderFactory = (provider: ProviderConfig, job: JobConfig) => RunnerOption | undefined;
 declare const providerFactories: Record<string, ProviderFactory>;
 declare function getRunnerOption(providerId: string, provider: ProviderConfig, job: JobConfig): RunnerOption | undefined;
@@ -102,4 +110,4 @@ declare function roundQuota(value: number): number;
 
 declare function resolveFreelane(config: FreelaneConfig, jobId: string): RoutingDecision;
 
-export { type Candidate, type DefaultsConfig, type FreelaneConfig, type JobConfig, type PaidPolicy, type ProviderConfig, type QuotaUnit, type RoutingDecision, type RunnerArch, type RunnerOption, type RunnerOs, displayUnit, doctorConfig, findConfigPath, formatDecision, formatDoctor, getRunnerOption, loadConfig, providerFactories, quotaFor, resolveFreelane, roundQuota };
+export { type Candidate, type DefaultsConfig, type FreelaneConfig, type JobConfig, type PaidPolicy, type ProviderConfig, type QuotaUnit, type RoutingDecision, type RunnerArch, type RunnerOption, type RunnerOs, displayUnit, doctorConfig, findConfigPath, formatDecision, formatDoctor, getRunnerOption, loadConfig, providerFactories, quotaFor, resolveFreelane, roundQuota, starterConfig, writeStarterConfig };

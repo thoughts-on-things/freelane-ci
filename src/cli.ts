@@ -2,13 +2,16 @@
 import { loadConfig } from "./config";
 import { doctorConfig, formatDoctor } from "./doctor";
 import { formatDecision } from "./format";
+import { writeStarterConfig } from "./init";
 import { resolveFreelane } from "./resolve";
 
 interface Args {
   command?: string;
   subcommand?: string;
   config?: string;
+  force?: boolean;
   job?: string;
+  output?: string;
   format: "text" | "json" | "github-output";
 }
 
@@ -29,6 +32,12 @@ function main(): void {
     return;
   }
 
+  if (args.command === "init") {
+    const output = writeStarterConfig({ output: args.output, force: args.force });
+    process.stdout.write(`created ${output}\n`);
+    return;
+  }
+
   usage(0);
 }
 
@@ -44,7 +53,9 @@ function parseArgs(argv: string[]): Args {
     const value = argv[i];
     if (value === "--help" || value === "-h") usage(0);
     if (value === "--config") args.config = argv[++i];
+    else if (value === "--force") args.force = true;
     else if (value === "--job") args.job = argv[++i];
+    else if (value === "--output") args.output = argv[++i];
     else if (value === "--format") args.format = parseFormat(argv[++i]);
     else throw new Error(`unknown argument: ${value}`);
   }
@@ -59,6 +70,7 @@ function parseFormat(value: string): Args["format"] {
 function usage(code: number): never {
   process.stdout.write([
     "Usage:",
+    "  freelane init [--output .freelane.yml] [--force]",
     "  freelane resolve --job <job> [--config .freelane.yml] [--format text|json|github-output]",
     "  freelane providers doctor [--config .freelane.yml] [--format text|json]"
   ].join("\n") + "\n");

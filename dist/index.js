@@ -30,7 +30,9 @@ __export(index_exports, {
   providerFactories: () => providerFactories,
   quotaFor: () => quotaFor,
   resolveFreelane: () => resolveFreelane,
-  roundQuota: () => roundQuota
+  roundQuota: () => roundQuota,
+  starterConfig: () => starterConfig,
+  writeStarterConfig: () => writeStarterConfig
 });
 module.exports = __toCommonJS(index_exports);
 
@@ -321,6 +323,55 @@ function formatDecision(decision2, format) {
 `;
 }
 
+// src/init.ts
+var import_node_fs2 = require("fs");
+var import_node_path2 = require("path");
+function starterConfig() {
+  return [
+    "$schema: ./schemas/freelane.schema.json",
+    "version: 1",
+    "",
+    "defaults:",
+    "  paid: avoid",
+    "  fallback:",
+    "    mode: pre_schedule",
+    "    providers: [github]",
+    "",
+    "providers:",
+    "  github:",
+    "    enabled: true",
+    "  blacksmith:",
+    "    enabled: false",
+    "    free_minutes_per_month: 3000",
+    "  ubicloud:",
+    "    enabled: false",
+    "    free_credit_usd_per_month: 2",
+    "  warpbuild:",
+    "    enabled: false",
+    "    free_credit_usd_per_month: 10",
+    "  namespace:",
+    "    enabled: false",
+    "    unit_minutes_per_month: 100000",
+    "",
+    "jobs:",
+    "  test-linux:",
+    "    os: linux",
+    "    arch: x64",
+    "    min_vcpu: 2",
+    "    estimate_minutes: 8",
+    "    providers: [blacksmith, ubicloud, warpbuild, github]",
+    ""
+  ].join("\n");
+}
+function writeStarterConfig(options = {}) {
+  const output = (0, import_node_path2.resolve)(options.cwd ?? process.cwd(), options.output ?? ".freelane.yml");
+  if ((0, import_node_fs2.existsSync)(output) && !options.force) {
+    throw new Error(`${output} already exists; pass --force to overwrite`);
+  }
+  (0, import_node_fs2.writeFileSync)(output, starterConfig(), "utf8");
+  return output;
+}
+
 // src/resolve.ts
 function resolveFreelane(config, jobId) {
   const job = config.jobs[jobId];
@@ -404,5 +455,7 @@ function directDecision(jobId, job) {
   providerFactories,
   quotaFor,
   resolveFreelane,
-  roundQuota
+  roundQuota,
+  starterConfig,
+  writeStarterConfig
 });
