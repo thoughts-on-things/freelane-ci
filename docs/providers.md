@@ -2,6 +2,12 @@
 
 Freelane's first provider model is GitHub Actions compatible runner labels.
 
+List supported adapters:
+
+```bash
+freelane providers list
+```
+
 ## GitHub
 
 Default labels:

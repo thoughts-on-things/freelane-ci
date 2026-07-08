@@ -95,6 +95,16 @@ interface InitOptions {
 declare function starterConfig(): string;
 declare function writeStarterConfig(options?: InitOptions): string;
 
+interface ProviderSummary {
+    id: string;
+    name: string;
+    adapter: string;
+    quota: string;
+    notes: string;
+}
+declare function listProviders(): ProviderSummary[];
+declare function formatProviderList(items: ProviderSummary[], format: string): string;
+
 type ProviderFactory = (provider: ProviderConfig, job: JobConfig) => RunnerOption | undefined;
 declare const providerFactories: Record<string, ProviderFactory>;
 declare function getRunnerOption(providerId: string, provider: ProviderConfig, job: JobConfig): RunnerOption | undefined;
@@ -122,4 +132,4 @@ interface ConfigValidationResult {
 declare function validateConfigFile(path?: string): ConfigValidationResult;
 declare function formatValidation(result: ConfigValidationResult, format: string): string;
 
-export { type Candidate, type DefaultsConfig, type FreelaneConfig, type JobConfig, type PaidPolicy, type ProviderConfig, type QuotaUnit, type RoutingDecision, type RunnerArch, type RunnerOption, type RunnerOs, displayUnit, doctorConfig, findConfigPath, formatDecision, formatDoctor, formatValidation, getRunnerOption, loadConfig, providerFactories, quotaFor, resolveFreelane, roundQuota, starterConfig, validateConfigFile, writeStarterConfig };
+export { type Candidate, type DefaultsConfig, type FreelaneConfig, type JobConfig, type PaidPolicy, type ProviderConfig, type QuotaUnit, type RoutingDecision, type RunnerArch, type RunnerOption, type RunnerOs, displayUnit, doctorConfig, findConfigPath, formatDecision, formatDoctor, formatProviderList, formatValidation, getRunnerOption, listProviders, loadConfig, providerFactories, quotaFor, resolveFreelane, roundQuota, starterConfig, validateConfigFile, writeStarterConfig };

@@ -35,8 +35,10 @@ __export(index_exports, {
   findConfigPath: () => findConfigPath,
   formatDecision: () => formatDecision,
   formatDoctor: () => formatDoctor,
+  formatProviderList: () => formatProviderList,
   formatValidation: () => formatValidation,
   getRunnerOption: () => getRunnerOption,
+  listProviders: () => listProviders,
   loadConfig: () => loadConfig,
   providerFactories: () => providerFactories,
   quotaFor: () => quotaFor,
@@ -384,6 +386,56 @@ function writeStarterConfig(options = {}) {
   return output;
 }
 
+// src/provider-list.ts
+var providers = [
+  {
+    id: "github",
+    name: "GitHub",
+    adapter: "hosted runner labels",
+    quota: "minutes or unlimited",
+    notes: "default fallback"
+  },
+  {
+    id: "blacksmith",
+    name: "Blacksmith",
+    adapter: "GitHub-compatible runner labels",
+    quota: "minutes or usd",
+    notes: "linux, windows, macos"
+  },
+  {
+    id: "ubicloud",
+    name: "Ubicloud",
+    adapter: "GitHub-compatible runner labels",
+    quota: "usd",
+    notes: "linux"
+  },
+  {
+    id: "warpbuild",
+    name: "WarpBuild",
+    adapter: "GitHub-compatible runner labels",
+    quota: "usd",
+    notes: "linux, windows, macos"
+  },
+  {
+    id: "namespace",
+    name: "Namespace",
+    adapter: "GitHub-compatible runner labels",
+    quota: "unit minutes",
+    notes: "supports profiles"
+  }
+];
+function listProviders() {
+  return providers.map((provider) => ({ ...provider }));
+}
+function formatProviderList(items, format) {
+  if (format === "json") return `${JSON.stringify({ providers: items }, null, 2)}
+`;
+  return [
+    "id	name	quota	notes",
+    ...items.map((provider) => `${provider.id}	${provider.name}	${provider.quota}	${provider.notes}`)
+  ].join("\n") + "\n";
+}
+
 // src/resolve.ts
 function resolveFreelane(config, jobId) {
   const job = config.jobs[jobId];
@@ -715,8 +767,10 @@ function isRecord2(value) {
   findConfigPath,
   formatDecision,
   formatDoctor,
+  formatProviderList,
   formatValidation,
   getRunnerOption,
+  listProviders,
   loadConfig,
   providerFactories,
   quotaFor,

@@ -3,6 +3,7 @@ import { loadConfig } from "./config";
 import { doctorConfig, formatDoctor } from "./doctor";
 import { formatDecision } from "./format";
 import { writeStarterConfig } from "./init";
+import { formatProviderList, listProviders } from "./provider-list";
 import { resolveFreelane } from "./resolve";
 import { formatValidation, validateConfigFile } from "./schema";
 
@@ -30,6 +31,11 @@ function main(): void {
   if (args.command === "providers" && args.subcommand === "doctor") {
     const config = loadConfig(args.config);
     process.stdout.write(formatDoctor(doctorConfig(config), args.format));
+    return;
+  }
+
+  if (args.command === "providers" && args.subcommand === "list") {
+    process.stdout.write(formatProviderList(listProviders(), args.format));
     return;
   }
 
@@ -81,7 +87,8 @@ function usage(code: number): never {
     "  freelane init [--output .freelane.yml] [--force]",
     "  freelane config validate [--config .freelane.yml] [--format text|json]",
     "  freelane resolve --job <job> [--config .freelane.yml] [--format text|json|github-output]",
-    "  freelane providers doctor [--config .freelane.yml] [--format text|json]"
+    "  freelane providers doctor [--config .freelane.yml] [--format text|json]",
+    "  freelane providers list [--format text|json]"
   ].join("\n") + "\n");
   process.exit(code);
 }

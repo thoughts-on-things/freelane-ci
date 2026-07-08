@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Add providers list CLI command.
 - Check provider references during config validation.
 - Add config validate CLI command.
 - Add init CLI command for starter configs.
