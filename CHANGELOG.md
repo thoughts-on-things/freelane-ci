@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Add config validate CLI command.
 - Add init CLI command for starter configs.
 - Add provider doctor CLI command.
 - Add JSON Schema for Freelane config.

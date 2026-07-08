@@ -110,4 +110,16 @@ declare function roundQuota(value: number): number;
 
 declare function resolveFreelane(config: FreelaneConfig, jobId: string): RoutingDecision;
 
-export { type Candidate, type DefaultsConfig, type FreelaneConfig, type JobConfig, type PaidPolicy, type ProviderConfig, type QuotaUnit, type RoutingDecision, type RunnerArch, type RunnerOption, type RunnerOs, displayUnit, doctorConfig, findConfigPath, formatDecision, formatDoctor, getRunnerOption, loadConfig, providerFactories, quotaFor, resolveFreelane, roundQuota, starterConfig, writeStarterConfig };
+interface ConfigValidationIssue {
+    path: string;
+    message: string;
+}
+interface ConfigValidationResult {
+    valid: boolean;
+    path: string;
+    issues: ConfigValidationIssue[];
+}
+declare function validateConfigFile(path?: string): ConfigValidationResult;
+declare function formatValidation(result: ConfigValidationResult, format: string): string;
+
+export { type Candidate, type DefaultsConfig, type FreelaneConfig, type JobConfig, type PaidPolicy, type ProviderConfig, type QuotaUnit, type RoutingDecision, type RunnerArch, type RunnerOption, type RunnerOs, displayUnit, doctorConfig, findConfigPath, formatDecision, formatDoctor, formatValidation, getRunnerOption, loadConfig, providerFactories, quotaFor, resolveFreelane, roundQuota, starterConfig, validateConfigFile, writeStarterConfig };

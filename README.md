@@ -70,6 +70,7 @@ Try the CLI locally:
 npm install
 npm run build
 node dist/cli.js init --output .freelane.yml
+node dist/cli.js config validate --config examples/freelane.yml
 node dist/cli.js resolve --config examples/freelane.yml --job test-linux --format json
 node dist/cli.js providers doctor --config examples/freelane.yml
 ```

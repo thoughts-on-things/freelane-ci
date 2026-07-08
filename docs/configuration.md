@@ -83,3 +83,9 @@ Optional:
 ## Schema
 
 The JSON Schema lives at [schemas/freelane.schema.json](../schemas/freelane.schema.json).
+
+Validate a config:
+
+```bash
+freelane config validate --config .freelane.yml
+```

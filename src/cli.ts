@@ -4,6 +4,7 @@ import { doctorConfig, formatDoctor } from "./doctor";
 import { formatDecision } from "./format";
 import { writeStarterConfig } from "./init";
 import { resolveFreelane } from "./resolve";
+import { formatValidation, validateConfigFile } from "./schema";
 
 interface Args {
   command?: string;
@@ -32,6 +33,13 @@ function main(): void {
     return;
   }
 
+  if (args.command === "config" && args.subcommand === "validate") {
+    const result = validateConfigFile(args.config);
+    process.stdout.write(formatValidation(result, args.format));
+    if (!result.valid) process.exit(1);
+    return;
+  }
+
   if (args.command === "init") {
     const output = writeStarterConfig({ output: args.output, force: args.force });
     process.stdout.write(`created ${output}\n`);
@@ -44,7 +52,7 @@ function main(): void {
 function parseArgs(argv: string[]): Args {
   const args: Args = { command: argv[0], format: "text" };
   let start = 1;
-  if (args.command === "providers") {
+  if (args.command === "providers" || args.command === "config") {
     args.subcommand = argv[1];
     start = 2;
   }
@@ -71,6 +79,7 @@ function usage(code: number): never {
   process.stdout.write([
     "Usage:",
     "  freelane init [--output .freelane.yml] [--force]",
+    "  freelane config validate [--config .freelane.yml] [--format text|json]",
     "  freelane resolve --job <job> [--config .freelane.yml] [--format text|json|github-output]",
     "  freelane providers doctor [--config .freelane.yml] [--format text|json]"
   ].join("\n") + "\n");

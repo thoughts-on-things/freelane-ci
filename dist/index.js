@@ -1,7 +1,9 @@
 "use strict";
+var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
+var __getProtoOf = Object.getPrototypeOf;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
 var __export = (target, all) => {
   for (var name in all)
@@ -15,6 +17,14 @@ var __copyProps = (to, from, except, desc) => {
   }
   return to;
 };
+var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
+  // If the importer is in node compatibility mode or this is not an ESM
+  // file that has been converted to a CommonJS file using a Babel-
+  // compatible transform (i.e. "__esModule" has not been set), then set
+  // "default" to the CommonJS "module.exports" for node compatibility.
+  isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
+  mod
+));
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
 // src/index.ts
@@ -25,6 +35,7 @@ __export(index_exports, {
   findConfigPath: () => findConfigPath,
   formatDecision: () => formatDecision,
   formatDoctor: () => formatDoctor,
+  formatValidation: () => formatValidation,
   getRunnerOption: () => getRunnerOption,
   loadConfig: () => loadConfig,
   providerFactories: () => providerFactories,
@@ -32,6 +43,7 @@ __export(index_exports, {
   resolveFreelane: () => resolveFreelane,
   roundQuota: () => roundQuota,
   starterConfig: () => starterConfig,
+  validateConfigFile: () => validateConfigFile,
   writeStarterConfig: () => writeStarterConfig
 });
 module.exports = __toCommonJS(index_exports);
@@ -443,6 +455,213 @@ function directDecision(jobId, job) {
     available: Number.POSITIVE_INFINITY
   };
 }
+
+// src/schema.ts
+var import__ = __toESM(require("ajv/dist/2020"));
+var import_node_fs3 = require("fs");
+var import_yaml2 = require("yaml");
+
+// schemas/freelane.schema.json
+var freelane_schema_default = {
+  $schema: "https://json-schema.org/draft/2020-12/schema",
+  $id: "https://freelane-ci.dev/schemas/freelane.schema.json",
+  title: "Freelane CI config",
+  type: "object",
+  required: ["version", "providers", "jobs"],
+  additionalProperties: false,
+  properties: {
+    $schema: {
+      type: "string"
+    },
+    version: {
+      const: 1
+    },
+    defaults: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        paid: {
+          enum: ["avoid", "allow", "forbid"]
+        },
+        reserve: {
+          type: "object",
+          additionalProperties: {
+            type: "number",
+            minimum: 0
+          }
+        },
+        fallback: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            mode: {
+              const: "pre_schedule"
+            },
+            providers: {
+              type: "array",
+              items: {
+                type: "string",
+                minLength: 1
+              }
+            }
+          }
+        },
+        alerts: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            github_summary: {
+              type: "boolean"
+            },
+            github_warning: {
+              type: "boolean"
+            },
+            webhook_url: {
+              type: "string"
+            }
+          }
+        }
+      }
+    },
+    providers: {
+      type: "object",
+      minProperties: 1,
+      additionalProperties: {
+        $ref: "#/$defs/provider"
+      }
+    },
+    jobs: {
+      type: "object",
+      minProperties: 1,
+      additionalProperties: {
+        $ref: "#/$defs/job"
+      }
+    }
+  },
+  $defs: {
+    runner: {
+      oneOf: [
+        {
+          type: "string",
+          minLength: 1
+        },
+        {
+          type: "array",
+          items: {
+            type: "string",
+            minLength: 1
+          },
+          minItems: 1
+        }
+      ]
+    },
+    provider: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        enabled: {
+          type: "boolean"
+        },
+        free_minutes_per_month: {
+          type: "number",
+          minimum: 0
+        },
+        free_credit_usd_per_month: {
+          type: "number",
+          minimum: 0
+        },
+        unit_minutes_per_month: {
+          type: "number",
+          minimum: 0
+        },
+        used_minutes: {
+          type: "number",
+          minimum: 0
+        },
+        used_credit_usd: {
+          type: "number",
+          minimum: 0
+        },
+        used_unit_minutes: {
+          type: "number",
+          minimum: 0
+        },
+        runner: {
+          $ref: "#/$defs/runner"
+        },
+        profile: {
+          type: "string",
+          minLength: 1
+        },
+        owner: {
+          type: "string",
+          minLength: 1
+        },
+        scope: {
+          enum: ["user", "org", "enterprise"]
+        }
+      }
+    },
+    job: {
+      type: "object",
+      required: ["os"],
+      additionalProperties: false,
+      properties: {
+        os: {
+          enum: ["linux", "windows", "macos"]
+        },
+        arch: {
+          enum: ["x64", "arm64"]
+        },
+        min_vcpu: {
+          type: "number",
+          minimum: 1
+        },
+        estimate_minutes: {
+          type: "number",
+          minimum: 0
+        },
+        providers: {
+          type: "array",
+          items: {
+            type: "string",
+            minLength: 1
+          },
+          minItems: 1
+        },
+        runner: {
+          $ref: "#/$defs/runner"
+        }
+      }
+    }
+  }
+};
+
+// src/schema.ts
+function validateConfigFile(path = findConfigPath()) {
+  const config = (0, import_yaml2.parse)((0, import_node_fs3.readFileSync)(path, "utf8"));
+  const ajv = new import__.default({ allErrors: true });
+  const validate = ajv.compile(freelane_schema_default);
+  const valid = validate(config);
+  return {
+    valid,
+    path,
+    issues: (validate.errors ?? []).map((error) => ({
+      path: error.instancePath || "/",
+      message: error.message ?? "invalid value"
+    }))
+  };
+}
+function formatValidation(result, format) {
+  if (format === "json") return `${JSON.stringify(result, null, 2)}
+`;
+  if (result.valid) return `valid ${result.path}
+`;
+  return [
+    `invalid ${result.path}`,
+    ...result.issues.map((issue) => `- ${issue.path} ${issue.message}`)
+  ].join("\n") + "\n";
+}
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   displayUnit,
@@ -450,6 +669,7 @@ function directDecision(jobId, job) {
   findConfigPath,
   formatDecision,
   formatDoctor,
+  formatValidation,
   getRunnerOption,
   loadConfig,
   providerFactories,
@@ -457,5 +677,6 @@ function directDecision(jobId, job) {
   resolveFreelane,
   roundQuota,
   starterConfig,
+  validateConfigFile,
   writeStarterConfig
 });
