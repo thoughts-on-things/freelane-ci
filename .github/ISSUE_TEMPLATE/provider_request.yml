@@ -1,0 +1,15 @@
+name: Provider request
+description: Request or update provider support.
+body:
+  - type: input
+    id: provider
+    attributes:
+      label: Provider
+    validations:
+      required: true
+  - type: textarea
+    id: links
+    attributes:
+      label: Docs, pricing, and runner labels
+    validations:
+      required: true

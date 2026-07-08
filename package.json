@@ -1,0 +1,57 @@
+{
+  "name": "freelane-ci",
+  "version": "0.1.0",
+  "description": "Route GitHub Actions jobs across CI runner providers to use free credits first.",
+  "license": "MIT",
+  "private": false,
+  "type": "commonjs",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "freelane": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "action.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsup src/action.ts src/cli.ts src/index.ts --format cjs --platform node --target node20 --dts --clean",
+    "check": "npm run typecheck && npm test && npm run build",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "github-actions",
+    "ci",
+    "ci-cd",
+    "runners",
+    "cost-optimization"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/freelane-ci/freelane.git"
+  },
+  "bugs": {
+    "url": "https://github.com/freelane-ci/freelane/issues"
+  },
+  "homepage": "https://github.com/freelane-ci/freelane#readme",
+  "dependencies": {
+    "@actions/core": "^1.11.1",
+    "yaml": "^2.8.1"
+  },
+  "overrides": {
+    "esbuild": "^0.28.1",
+    "undici": "^6.27.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.10",
+    "tsup": "^8.5.0",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  }
+}

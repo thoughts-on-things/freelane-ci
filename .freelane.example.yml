@@ -1,0 +1,25 @@
+version: 1
+
+defaults:
+  paid: avoid
+  fallback:
+    mode: pre_schedule
+    providers: [github]
+
+providers:
+  github:
+    enabled: true
+  blacksmith:
+    enabled: true
+    free_minutes_per_month: 3000
+  ubicloud:
+    enabled: true
+    free_credit_usd_per_month: 2
+
+jobs:
+  test-linux:
+    os: linux
+    arch: x64
+    min_vcpu: 2
+    estimate_minutes: 8
+    providers: [blacksmith, ubicloud, github]

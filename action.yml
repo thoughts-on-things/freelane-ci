@@ -1,0 +1,26 @@
+name: Freelane CI
+description: Route a GitHub Actions job to the best configured CI runner provider.
+author: Freelane CI contributors
+
+inputs:
+  job:
+    description: Job key from the Freelane config.
+    required: true
+  config:
+    description: Path to the Freelane config file.
+    required: false
+    default: .freelane.yml
+
+outputs:
+  runs_on:
+    description: JSON value for use with fromJSON(...).
+  provider:
+    description: Selected provider id.
+  runner:
+    description: Selected runner label or label array.
+  reason:
+    description: Short routing reason.
+
+runs:
+  using: node20
+  main: dist/action.js
