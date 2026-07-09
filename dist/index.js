@@ -31,6 +31,9 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 var index_exports = {};
 __export(index_exports, {
   CONFIG_SCHEMA_URL: () => CONFIG_SCHEMA_URL,
+  DEFAULT_USAGE_STATE: () => DEFAULT_USAGE_STATE,
+  applyUsageState: () => applyUsageState,
+  applyUsageStateIfPresent: () => applyUsageStateIfPresent,
   collectGitHubUsage: () => collectGitHubUsage,
   displayUnit: () => displayUnit,
   doctorConfig: () => doctorConfig,
@@ -46,6 +49,7 @@ __export(index_exports, {
   inferProvider: () => inferProvider,
   listProviders: () => listProviders,
   loadConfig: () => loadConfig,
+  loadUsageState: () => loadUsageState,
   planFreelane: () => planFreelane,
   providerFactories: () => providerFactories,
   quotaFor: () => quotaFor,
@@ -645,8 +649,8 @@ function formatPlan(plan, format) {
       decision2.job,
       decision2.provider,
       decision2.runsOnJson,
-      `${decision2.quotaBurn} ${displayUnit(decision2.quotaUnit)}`,
-      `${decision2.remaining} ${displayUnit(decision2.quotaUnit)}`,
+      formatAmount(decision2.quotaBurn, decision2.quotaUnit),
+      formatAmount(decision2.remaining, decision2.quotaUnit),
       decision2.reason
     ].join("	"))
   ].join("\n") + "\n";
@@ -676,6 +680,11 @@ function consumeQuota(provider, unit, burn) {
 function remainingAfter(available, burn) {
   if (!Number.isFinite(available)) return available;
   return roundQuota(available - burn);
+}
+function formatAmount(value, unit) {
+  if (!Number.isFinite(value)) return "unlimited";
+  if (unit === "unlimited") return String(value);
+  return `${value} ${displayUnit(unit)}`;
 }
 
 // src/provider-list.ts
@@ -1007,10 +1016,10 @@ function formatUsageReport(report, format) {
     ...report.entries.map((entry) => [
       entry.provider,
       String(entry.enabled),
-      formatAmount(entry.total, entry.quotaUnit),
-      formatAmount(entry.used, entry.quotaUnit),
-      formatAmount(entry.reserve, entry.quotaUnit),
-      formatAmount(entry.available, entry.quotaUnit)
+      formatAmount2(entry.total, entry.quotaUnit),
+      formatAmount2(entry.used, entry.quotaUnit),
+      formatAmount2(entry.reserve, entry.quotaUnit),
+      formatAmount2(entry.available, entry.quotaUnit)
     ].join("	"))
   ].join("\n") + "\n";
 }
@@ -1018,14 +1027,56 @@ function usageAmount(value) {
   if (!Number.isFinite(value)) return "unlimited";
   return roundQuota(value);
 }
-function formatAmount(value, unit) {
+function formatAmount2(value, unit) {
   if (value === "unlimited") return value;
   if (unit === "unlimited") return String(value);
   return `${value} ${displayUnit(unit)}`;
 }
+
+// src/usage-state.ts
+var import_node_fs5 = require("fs");
+var import_node_path4 = require("path");
+var DEFAULT_USAGE_STATE = ".freelane-usage.json";
+function loadUsageState(path = DEFAULT_USAGE_STATE) {
+  const parsed = JSON.parse((0, import_node_fs5.readFileSync)(path, "utf8"));
+  if (parsed.source !== "github-actions" || !parsed.providers) {
+    throw new Error(`${path}: unsupported usage state`);
+  }
+  return parsed;
+}
+function applyUsageState(config, state) {
+  const next = copyConfig2(config);
+  for (const [providerId, total] of Object.entries(state.providers)) {
+    const provider = next.providers[providerId];
+    if (!provider || quotaUnitForProvider(provider) !== "minutes") continue;
+    provider.used_minutes = roundQuota((provider.used_minutes ?? 0) + total.minutes);
+  }
+  return next;
+}
+function applyUsageStateIfPresent(config, options = {}) {
+  if (options.disabled) return config;
+  const path = (0, import_node_path4.resolve)(options.path ?? DEFAULT_USAGE_STATE);
+  if (!options.path && !(0, import_node_fs5.existsSync)(path)) return config;
+  return applyUsageState(config, loadUsageState(path));
+}
+function copyConfig2(config) {
+  return {
+    ...config,
+    defaults: config.defaults ? { ...config.defaults } : void 0,
+    providers: Object.fromEntries(
+      Object.entries(config.providers).map(([id, provider]) => [id, { ...provider }])
+    ),
+    jobs: Object.fromEntries(
+      Object.entries(config.jobs).map(([id, job]) => [id, { ...job }])
+    )
+  };
+}
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   CONFIG_SCHEMA_URL,
+  DEFAULT_USAGE_STATE,
+  applyUsageState,
+  applyUsageStateIfPresent,
   collectGitHubUsage,
   displayUnit,
   doctorConfig,
@@ -1041,6 +1092,7 @@ function formatAmount(value, unit) {
   inferProvider,
   listProviders,
   loadConfig,
+  loadUsageState,
   planFreelane,
   providerFactories,
   quotaFor,

@@ -51,5 +51,6 @@ describe("planFreelane", () => {
 
     expect(formatPlan(plan, "text")).toContain("job\tprovider\trunner\tburn\tremaining\treason");
     expect(formatPlan(plan, "text")).toContain("test\tgithub");
+    expect(formatPlan(plan, "text")).toContain("0\tunlimited");
   });
 });

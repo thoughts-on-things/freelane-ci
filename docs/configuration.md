@@ -55,6 +55,9 @@ Optional local usage fields:
 - `used_credit_usd`
 - `used_unit_minutes`
 
+`freelane usage sync-github` can also write `.freelane-usage.json`; routing
+commands read it automatically when present.
+
 Use `runner` to override Freelane's built-in runner label:
 
 ```yaml

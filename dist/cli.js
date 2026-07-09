@@ -611,8 +611,8 @@ function formatPlan(plan, format) {
       decision2.job,
       decision2.provider,
       decision2.runsOnJson,
-      `${decision2.quotaBurn} ${displayUnit(decision2.quotaUnit)}`,
-      `${decision2.remaining} ${displayUnit(decision2.quotaUnit)}`,
+      formatAmount(decision2.quotaBurn, decision2.quotaUnit),
+      formatAmount(decision2.remaining, decision2.quotaUnit),
       decision2.reason
     ].join("	"))
   ].join("\n") + "\n";
@@ -642,6 +642,11 @@ function consumeQuota(provider, unit, burn) {
 function remainingAfter(available, burn) {
   if (!Number.isFinite(available)) return available;
   return roundQuota(available - burn);
+}
+function formatAmount(value, unit) {
+  if (!Number.isFinite(value)) return "unlimited";
+  if (unit === "unlimited") return String(value);
+  return `${value} ${displayUnit(unit)}`;
 }
 
 // src/provider-list.ts
@@ -973,10 +978,10 @@ function formatUsageReport(report, format) {
     ...report.entries.map((entry) => [
       entry.provider,
       String(entry.enabled),
-      formatAmount(entry.total, entry.quotaUnit),
-      formatAmount(entry.used, entry.quotaUnit),
-      formatAmount(entry.reserve, entry.quotaUnit),
-      formatAmount(entry.available, entry.quotaUnit)
+      formatAmount2(entry.total, entry.quotaUnit),
+      formatAmount2(entry.used, entry.quotaUnit),
+      formatAmount2(entry.reserve, entry.quotaUnit),
+      formatAmount2(entry.available, entry.quotaUnit)
     ].join("	"))
   ].join("\n") + "\n";
 }
@@ -984,10 +989,49 @@ function usageAmount(value) {
   if (!Number.isFinite(value)) return "unlimited";
   return roundQuota(value);
 }
-function formatAmount(value, unit) {
+function formatAmount2(value, unit) {
   if (value === "unlimited") return value;
   if (unit === "unlimited") return String(value);
   return `${value} ${displayUnit(unit)}`;
+}
+
+// src/usage-state.ts
+var import_node_fs5 = require("fs");
+var import_node_path4 = require("path");
+var DEFAULT_USAGE_STATE = ".freelane-usage.json";
+function loadUsageState(path = DEFAULT_USAGE_STATE) {
+  const parsed = JSON.parse((0, import_node_fs5.readFileSync)(path, "utf8"));
+  if (parsed.source !== "github-actions" || !parsed.providers) {
+    throw new Error(`${path}: unsupported usage state`);
+  }
+  return parsed;
+}
+function applyUsageState(config, state) {
+  const next = copyConfig2(config);
+  for (const [providerId, total] of Object.entries(state.providers)) {
+    const provider = next.providers[providerId];
+    if (!provider || quotaUnitForProvider(provider) !== "minutes") continue;
+    provider.used_minutes = roundQuota((provider.used_minutes ?? 0) + total.minutes);
+  }
+  return next;
+}
+function applyUsageStateIfPresent(config, options = {}) {
+  if (options.disabled) return config;
+  const path = (0, import_node_path4.resolve)(options.path ?? DEFAULT_USAGE_STATE);
+  if (!options.path && !(0, import_node_fs5.existsSync)(path)) return config;
+  return applyUsageState(config, loadUsageState(path));
+}
+function copyConfig2(config) {
+  return {
+    ...config,
+    defaults: config.defaults ? { ...config.defaults } : void 0,
+    providers: Object.fromEntries(
+      Object.entries(config.providers).map(([id, provider]) => [id, { ...provider }])
+    ),
+    jobs: Object.fromEntries(
+      Object.entries(config.jobs).map(([id, job]) => [id, { ...job }])
+    )
+  };
 }
 
 // src/cli.ts
@@ -995,18 +1039,18 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.command === "resolve") {
     if (!args.job) throw new Error("missing required --job");
-    const config = loadConfig(args.config);
+    const config = loadConfigForRouting(args);
     const decision2 = resolveFreelane(config, args.job);
     process.stdout.write(formatDecision(decision2, args.format));
     return;
   }
   if (args.command === "plan") {
-    const config = loadConfig(args.config);
+    const config = loadConfigForRouting(args);
     process.stdout.write(formatPlan(planFreelane(config), args.format));
     return;
   }
   if (args.command === "providers" && args.subcommand === "doctor") {
-    const config = loadConfig(args.config);
+    const config = loadConfigForRouting(args);
     process.stdout.write(formatDoctor(doctorConfig(config), args.format));
     return;
   }
@@ -1015,7 +1059,7 @@ async function main() {
     return;
   }
   if (args.command === "usage" && args.subcommand === "report") {
-    const config = loadConfig(args.config);
+    const config = loadConfigForRouting(args);
     process.stdout.write(formatUsageReport(usageReport(config), args.format));
     return;
   }
@@ -1064,6 +1108,8 @@ function parseArgs(argv) {
     else if (value === "--output") args.output = argv[++i];
     else if (value === "--repo") args.repo = argv[++i];
     else if (value === "--token") args.token = argv[++i];
+    else if (value === "--usage-state") args.usageState = argv[++i];
+    else if (value === "--no-usage-state") args.noUsageState = true;
     else if (value === "--format") args.format = parseFormat(argv[++i]);
     else throw new Error(`unknown argument: ${value}`);
   }
@@ -1078,16 +1124,23 @@ function parsePositiveInt(value, flag) {
   if (!Number.isInteger(parsed) || parsed <= 0) throw new Error(`${flag} must be a positive integer`);
   return parsed;
 }
+function loadConfigForRouting(args) {
+  const config = loadConfig(args.config);
+  return applyUsageStateIfPresent(config, {
+    path: args.usageState,
+    disabled: args.noUsageState
+  });
+}
 function usage(code) {
   process.stdout.write([
     "Usage:",
     "  freelane init [--output .freelane.yml] [--force]",
     "  freelane config validate [--config .freelane.yml] [--format text|json]",
-    "  freelane plan [--config .freelane.yml] [--format text|json]",
-    "  freelane resolve --job <job> [--config .freelane.yml] [--format text|json|github-output]",
-    "  freelane providers doctor [--config .freelane.yml] [--format text|json]",
+    "  freelane plan [--config .freelane.yml] [--usage-state .freelane-usage.json] [--format text|json]",
+    "  freelane resolve --job <job> [--config .freelane.yml] [--usage-state .freelane-usage.json] [--format text|json|github-output]",
+    "  freelane providers doctor [--config .freelane.yml] [--usage-state .freelane-usage.json] [--format text|json]",
     "  freelane providers list [--format text|json]",
-    "  freelane usage report [--config .freelane.yml] [--format text|json]",
+    "  freelane usage report [--config .freelane.yml] [--usage-state .freelane-usage.json] [--format text|json]",
     "  freelane usage sync-github [--repo owner/repo] [--days 30] [--limit 50] [--output .freelane-usage.json] [--format text|json]"
   ].join("\n") + "\n");
   process.exit(code);

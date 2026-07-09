@@ -49,6 +49,9 @@ Sync recent GitHub Actions history into local state:
 GITHUB_TOKEN=... node dist/cli.js usage sync-github --repo owner/repo
 ```
 
+Routing commands automatically read `.freelane-usage.json` when it exists. Use
+`--no-usage-state` to ignore it.
+
 Preview all job routing with quota burn carried forward:
 
 ```bash

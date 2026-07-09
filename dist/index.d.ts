@@ -210,4 +210,13 @@ interface UsageReport {
 declare function usageReport(config: FreelaneConfig): UsageReport;
 declare function formatUsageReport(report: UsageReport, format: string): string;
 
-export { CONFIG_SCHEMA_URL, type Candidate, type DefaultsConfig, type FreelaneConfig, type JobConfig, type PaidPolicy, type ProviderConfig, type QuotaUnit, type RoutingDecision, type RunnerArch, type RunnerOption, type RunnerOs, collectGitHubUsage, displayUnit, doctorConfig, findConfigPath, formatDecision, formatDoctor, formatGitHubUsageState, formatPlan, formatProviderList, formatUsageReport, formatValidation, getRunnerOption, inferProvider, listProviders, loadConfig, planFreelane, providerFactories, quotaFor, resolveFreelane, roundQuota, starterConfig, usageReport, validateConfigFile, writeGitHubUsageState, writeStarterConfig };
+declare const DEFAULT_USAGE_STATE = ".freelane-usage.json";
+interface UsageStateOptions {
+    path?: string;
+    disabled?: boolean;
+}
+declare function loadUsageState(path?: string): GitHubUsageState;
+declare function applyUsageState(config: FreelaneConfig, state: GitHubUsageState): FreelaneConfig;
+declare function applyUsageStateIfPresent(config: FreelaneConfig, options?: UsageStateOptions): FreelaneConfig;
+
+export { CONFIG_SCHEMA_URL, type Candidate, DEFAULT_USAGE_STATE, type DefaultsConfig, type FreelaneConfig, type JobConfig, type PaidPolicy, type ProviderConfig, type QuotaUnit, type RoutingDecision, type RunnerArch, type RunnerOption, type RunnerOs, applyUsageState, applyUsageStateIfPresent, collectGitHubUsage, displayUnit, doctorConfig, findConfigPath, formatDecision, formatDoctor, formatGitHubUsageState, formatPlan, formatProviderList, formatUsageReport, formatValidation, getRunnerOption, inferProvider, listProviders, loadConfig, loadUsageState, planFreelane, providerFactories, quotaFor, resolveFreelane, roundQuota, starterConfig, usageReport, validateConfigFile, writeGitHubUsageState, writeStarterConfig };

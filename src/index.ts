@@ -11,6 +11,7 @@ export { displayUnit, quotaFor, roundQuota } from "./quota";
 export { resolveFreelane } from "./resolve";
 export { formatValidation, validateConfigFile } from "./schema";
 export { formatUsageReport, usageReport } from "./usage";
+export { applyUsageState, applyUsageStateIfPresent, DEFAULT_USAGE_STATE, loadUsageState } from "./usage-state";
 export type {
   Candidate,
   DefaultsConfig,

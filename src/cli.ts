@@ -9,6 +9,7 @@ import { formatProviderList, listProviders } from "./provider-list";
 import { resolveFreelane } from "./resolve";
 import { formatValidation, validateConfigFile } from "./schema";
 import { formatUsageReport, usageReport } from "./usage";
+import { applyUsageStateIfPresent } from "./usage-state";
 
 interface Args {
   command?: string;
@@ -21,6 +22,8 @@ interface Args {
   output?: string;
   repo?: string;
   token?: string;
+  usageState?: string;
+  noUsageState?: boolean;
   format: "text" | "json" | "github-output";
 }
 
@@ -29,20 +32,20 @@ async function main(): Promise<void> {
 
   if (args.command === "resolve") {
     if (!args.job) throw new Error("missing required --job");
-    const config = loadConfig(args.config);
+    const config = loadConfigForRouting(args);
     const decision = resolveFreelane(config, args.job);
     process.stdout.write(formatDecision(decision, args.format));
     return;
   }
 
   if (args.command === "plan") {
-    const config = loadConfig(args.config);
+    const config = loadConfigForRouting(args);
     process.stdout.write(formatPlan(planFreelane(config), args.format));
     return;
   }
 
   if (args.command === "providers" && args.subcommand === "doctor") {
-    const config = loadConfig(args.config);
+    const config = loadConfigForRouting(args);
     process.stdout.write(formatDoctor(doctorConfig(config), args.format));
     return;
   }
@@ -53,7 +56,7 @@ async function main(): Promise<void> {
   }
 
   if (args.command === "usage" && args.subcommand === "report") {
-    const config = loadConfig(args.config);
+    const config = loadConfigForRouting(args);
     process.stdout.write(formatUsageReport(usageReport(config), args.format));
     return;
   }
@@ -107,6 +110,8 @@ function parseArgs(argv: string[]): Args {
     else if (value === "--output") args.output = argv[++i];
     else if (value === "--repo") args.repo = argv[++i];
     else if (value === "--token") args.token = argv[++i];
+    else if (value === "--usage-state") args.usageState = argv[++i];
+    else if (value === "--no-usage-state") args.noUsageState = true;
     else if (value === "--format") args.format = parseFormat(argv[++i]);
     else throw new Error(`unknown argument: ${value}`);
   }
@@ -124,16 +129,24 @@ function parsePositiveInt(value: string, flag: string): number {
   return parsed;
 }
 
+function loadConfigForRouting(args: Args) {
+  const config = loadConfig(args.config);
+  return applyUsageStateIfPresent(config, {
+    path: args.usageState,
+    disabled: args.noUsageState
+  });
+}
+
 function usage(code: number): never {
   process.stdout.write([
     "Usage:",
     "  freelane init [--output .freelane.yml] [--force]",
     "  freelane config validate [--config .freelane.yml] [--format text|json]",
-    "  freelane plan [--config .freelane.yml] [--format text|json]",
-    "  freelane resolve --job <job> [--config .freelane.yml] [--format text|json|github-output]",
-    "  freelane providers doctor [--config .freelane.yml] [--format text|json]",
+    "  freelane plan [--config .freelane.yml] [--usage-state .freelane-usage.json] [--format text|json]",
+    "  freelane resolve --job <job> [--config .freelane.yml] [--usage-state .freelane-usage.json] [--format text|json|github-output]",
+    "  freelane providers doctor [--config .freelane.yml] [--usage-state .freelane-usage.json] [--format text|json]",
     "  freelane providers list [--format text|json]",
-    "  freelane usage report [--config .freelane.yml] [--format text|json]",
+    "  freelane usage report [--config .freelane.yml] [--usage-state .freelane-usage.json] [--format text|json]",
     "  freelane usage sync-github [--repo owner/repo] [--days 30] [--limit 50] [--output .freelane-usage.json] [--format text|json]"
   ].join("\n") + "\n");
   process.exit(code);

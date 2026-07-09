@@ -34,8 +34,8 @@ export function formatPlan(plan: PlanResult, format: string): string {
       decision.job,
       decision.provider,
       decision.runsOnJson,
-      `${decision.quotaBurn} ${displayUnit(decision.quotaUnit)}`,
-      `${decision.remaining} ${displayUnit(decision.quotaUnit)}`,
+      formatAmount(decision.quotaBurn, decision.quotaUnit),
+      formatAmount(decision.remaining, decision.quotaUnit),
       decision.reason
     ].join("\t"))
   ].join("\n") + "\n";
@@ -69,4 +69,10 @@ function consumeQuota(provider: ProviderConfig | undefined, unit: QuotaUnit, bur
 function remainingAfter(available: number, burn: number): number {
   if (!Number.isFinite(available)) return available;
   return roundQuota(available - burn);
+}
+
+function formatAmount(value: number, unit: QuotaUnit): string {
+  if (!Number.isFinite(value)) return "unlimited";
+  if (unit === "unlimited") return String(value);
+  return `${value} ${displayUnit(unit)}`;
 }

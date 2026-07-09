@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Apply synced GitHub minute usage during routing.
 - Add GitHub Actions usage sync from workflow job history.
 - Add usage report CLI command for configured quota state.
 - Use a remote schema URL in starter configs.
