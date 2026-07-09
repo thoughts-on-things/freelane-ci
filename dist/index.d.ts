@@ -145,4 +145,20 @@ interface ConfigValidationResult {
 declare function validateConfigFile(path?: string): ConfigValidationResult;
 declare function formatValidation(result: ConfigValidationResult, format: string): string;
 
-export { CONFIG_SCHEMA_URL, type Candidate, type DefaultsConfig, type FreelaneConfig, type JobConfig, type PaidPolicy, type ProviderConfig, type QuotaUnit, type RoutingDecision, type RunnerArch, type RunnerOption, type RunnerOs, displayUnit, doctorConfig, findConfigPath, formatDecision, formatDoctor, formatPlan, formatProviderList, formatValidation, getRunnerOption, listProviders, loadConfig, planFreelane, providerFactories, quotaFor, resolveFreelane, roundQuota, starterConfig, validateConfigFile, writeStarterConfig };
+type UsageAmount = number | "unlimited";
+interface UsageEntry {
+    provider: string;
+    enabled: boolean;
+    quotaUnit: QuotaUnit;
+    total: UsageAmount;
+    used: number;
+    reserve: number;
+    available: UsageAmount;
+}
+interface UsageReport {
+    entries: UsageEntry[];
+}
+declare function usageReport(config: FreelaneConfig): UsageReport;
+declare function formatUsageReport(report: UsageReport, format: string): string;
+
+export { CONFIG_SCHEMA_URL, type Candidate, type DefaultsConfig, type FreelaneConfig, type JobConfig, type PaidPolicy, type ProviderConfig, type QuotaUnit, type RoutingDecision, type RunnerArch, type RunnerOption, type RunnerOs, displayUnit, doctorConfig, findConfigPath, formatDecision, formatDoctor, formatPlan, formatProviderList, formatUsageReport, formatValidation, getRunnerOption, listProviders, loadConfig, planFreelane, providerFactories, quotaFor, resolveFreelane, roundQuota, starterConfig, usageReport, validateConfigFile, writeStarterConfig };

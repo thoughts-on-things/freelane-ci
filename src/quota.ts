@@ -27,6 +27,13 @@ function rawQuotaFor(provider: ProviderConfig, unit: QuotaUnit): Omit<QuotaSnaps
   return { total: Number.POSITIVE_INFINITY, used: 0 };
 }
 
+export function quotaUnitForProvider(provider: ProviderConfig, fallback: QuotaUnit = "unlimited"): QuotaUnit {
+  if (provider.free_credit_usd_per_month !== undefined) return "usd";
+  if (provider.free_minutes_per_month !== undefined) return "minutes";
+  if (provider.unit_minutes_per_month !== undefined) return "unit_minutes";
+  return fallback;
+}
+
 export function displayUnit(unit: QuotaUnit): string {
   if (unit === "usd") return "usd";
   if (unit === "unit_minutes") return "unit-min";

@@ -1,4 +1,5 @@
 import type { JobConfig, ProviderConfig, QuotaUnit, RunnerOption, RunnerOs } from "./types";
+import { quotaUnitForProvider } from "./quota";
 
 type ProviderFactory = (provider: ProviderConfig, job: JobConfig) => RunnerOption | undefined;
 
@@ -18,7 +19,7 @@ export function getRunnerOption(
   job: JobConfig
 ): RunnerOption | undefined {
   if (provider.runner) {
-    return option(providerId, provider.runner, job.min_vcpu ?? 2, priceFor(providerId, job), job, quotaUnitFor(provider));
+    return option(providerId, provider.runner, job.min_vcpu ?? 2, priceFor(providerId, job), job, quotaUnitForProvider(provider));
   }
 
   const factory = providerFactories[providerId];
@@ -29,13 +30,13 @@ function githubRunner(_provider: ProviderConfig, job: JobConfig): RunnerOption |
   const arch = job.arch ?? "x64";
   const label = githubLabel(job.os, arch);
   if (!label) return undefined;
-  return option("github", label, job.min_vcpu ?? 2, undefined, job, quotaUnitFor(_provider));
+  return option("github", label, job.min_vcpu ?? 2, undefined, job, quotaUnitForProvider(_provider));
 }
 
 function blacksmithRunner(provider: ProviderConfig, job: JobConfig): RunnerOption | undefined {
   const arch = job.arch ?? "x64";
   const vcpu = nearestVcpu(job.min_vcpu);
-  const quotaUnit = quotaUnitFor(provider);
+  const quotaUnit = quotaUnitForProvider(provider);
 
   if (job.os === "linux" && arch === "x64") {
     return option("blacksmith", `blacksmith-${vcpu}vcpu-ubuntu-2404`, vcpu, priceFor("blacksmith", job), job, quotaUnit);
@@ -56,7 +57,7 @@ function blacksmithRunner(provider: ProviderConfig, job: JobConfig): RunnerOptio
 function ubicloudRunner(provider: ProviderConfig, job: JobConfig): RunnerOption | undefined {
   const arch = job.arch ?? "x64";
   const vcpu = nearestVcpu(job.min_vcpu, [2, 4, 8, 16, 30]);
-  const quotaUnit = quotaUnitFor(provider);
+  const quotaUnit = quotaUnitForProvider(provider);
 
   if (job.os !== "linux") return undefined;
   if (arch === "x64") {
@@ -68,7 +69,7 @@ function ubicloudRunner(provider: ProviderConfig, job: JobConfig): RunnerOption 
 function warpbuildRunner(provider: ProviderConfig, job: JobConfig): RunnerOption | undefined {
   const arch = job.arch ?? "x64";
   const vcpu = nearestVcpu(job.min_vcpu);
-  const quotaUnit = quotaUnitFor(provider);
+  const quotaUnit = quotaUnitForProvider(provider);
 
   if (job.os === "linux") {
     return option("warpbuild", `warp-ubuntu-latest-${arch}-${vcpu}x`, vcpu, priceFor("warpbuild", job), job, quotaUnit);
@@ -86,7 +87,7 @@ function warpbuildRunner(provider: ProviderConfig, job: JobConfig): RunnerOption
 
 function namespaceRunner(provider: ProviderConfig, job: JobConfig): RunnerOption | undefined {
   if (provider.profile) {
-    return option("namespace", `namespace-profile-${provider.profile}`, job.min_vcpu ?? 4, undefined, job, quotaUnitFor(provider));
+    return option("namespace", `namespace-profile-${provider.profile}`, job.min_vcpu ?? 4, undefined, job, quotaUnitForProvider(provider));
   }
 
   const arch = job.arch === "arm64" ? "arm64" : "amd64";
@@ -95,7 +96,7 @@ function namespaceRunner(provider: ProviderConfig, job: JobConfig): RunnerOption
   const os = namespaceOs(job.os);
   if (!os) return undefined;
 
-  return option("namespace", `nscloud-${os}-${arch}-${vcpu}x${memory}`, vcpu, undefined, job, quotaUnitFor(provider, "unit_minutes"));
+  return option("namespace", `nscloud-${os}-${arch}-${vcpu}x${memory}`, vcpu, undefined, job, quotaUnitForProvider(provider, "unit_minutes"));
 }
 
 function option(
@@ -109,13 +110,6 @@ function option(
   const minutes = job.estimate_minutes ?? 10;
   const quotaBurn = quotaUnit === "unlimited" ? 0 : quotaUnit === "usd" ? minutes * (unitPriceUsd ?? 0) : unitBurn(provider, job.os, vcpu, minutes);
   return { provider, runner, vcpu, unitPriceUsd, quotaBurn, quotaUnit };
-}
-
-function quotaUnitFor(provider: ProviderConfig, fallback: QuotaUnit = "unlimited"): QuotaUnit {
-  if (provider.free_credit_usd_per_month !== undefined) return "usd";
-  if (provider.free_minutes_per_month !== undefined) return "minutes";
-  if (provider.unit_minutes_per_month !== undefined) return "unit_minutes";
-  return fallback;
 }
 
 function unitBurn(provider: string, os: RunnerOs, vcpu: number, minutes: number): number {

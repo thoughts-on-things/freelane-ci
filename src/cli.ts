@@ -7,6 +7,7 @@ import { formatPlan, planFreelane } from "./plan";
 import { formatProviderList, listProviders } from "./provider-list";
 import { resolveFreelane } from "./resolve";
 import { formatValidation, validateConfigFile } from "./schema";
+import { formatUsageReport, usageReport } from "./usage";
 
 interface Args {
   command?: string;
@@ -46,6 +47,12 @@ function main(): void {
     return;
   }
 
+  if (args.command === "usage" && args.subcommand === "report") {
+    const config = loadConfig(args.config);
+    process.stdout.write(formatUsageReport(usageReport(config), args.format));
+    return;
+  }
+
   if (args.command === "config" && args.subcommand === "validate") {
     const result = validateConfigFile(args.config);
     process.stdout.write(formatValidation(result, args.format));
@@ -65,7 +72,7 @@ function main(): void {
 function parseArgs(argv: string[]): Args {
   const args: Args = { command: argv[0], format: "text" };
   let start = 1;
-  if (args.command === "providers" || args.command === "config") {
+  if (args.command === "providers" || args.command === "config" || args.command === "usage") {
     args.subcommand = argv[1];
     start = 2;
   }
@@ -96,7 +103,8 @@ function usage(code: number): never {
     "  freelane plan [--config .freelane.yml] [--format text|json]",
     "  freelane resolve --job <job> [--config .freelane.yml] [--format text|json|github-output]",
     "  freelane providers doctor [--config .freelane.yml] [--format text|json]",
-    "  freelane providers list [--format text|json]"
+    "  freelane providers list [--format text|json]",
+    "  freelane usage report [--config .freelane.yml] [--format text|json]"
   ].join("\n") + "\n");
   process.exit(code);
 }

@@ -9,6 +9,7 @@ export { getRunnerOption, providerFactories } from "./providers";
 export { displayUnit, quotaFor, roundQuota } from "./quota";
 export { resolveFreelane } from "./resolve";
 export { formatValidation, validateConfigFile } from "./schema";
+export { formatUsageReport, usageReport } from "./usage";
 export type {
   Candidate,
   DefaultsConfig,

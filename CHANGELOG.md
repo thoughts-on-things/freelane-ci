@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Add usage report CLI command for configured quota state.
 - Use a remote schema URL in starter configs.
 - Validate config by default in the GitHub Action.
 - Add plan CLI command for multi-job quota simulation.

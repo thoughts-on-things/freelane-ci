@@ -37,6 +37,12 @@ Check configured provider routing:
 node dist/cli.js providers doctor --config examples/freelane.yml
 ```
 
+Report configured quota state:
+
+```bash
+node dist/cli.js usage report --config examples/freelane.yml
+```
+
 Preview all job routing with quota burn carried forward:
 
 ```bash

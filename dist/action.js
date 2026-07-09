@@ -80,6 +80,37 @@ function isRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+// src/quota.ts
+function quotaFor(provider, unit, reserve = 0) {
+  const quota = rawQuotaFor(provider, unit);
+  return {
+    ...quota,
+    available: quota.total - quota.used - reserve
+  };
+}
+function rawQuotaFor(provider, unit) {
+  if (provider.free_credit_usd_per_month !== void 0) {
+    return { total: provider.free_credit_usd_per_month, used: provider.used_credit_usd ?? 0 };
+  }
+  if (provider.free_minutes_per_month !== void 0) {
+    return { total: provider.free_minutes_per_month, used: provider.used_minutes ?? 0 };
+  }
+  if (provider.unit_minutes_per_month !== void 0 || unit === "unit_minutes") {
+    return { total: provider.unit_minutes_per_month ?? 0, used: provider.used_unit_minutes ?? 0 };
+  }
+  return { total: Number.POSITIVE_INFINITY, used: 0 };
+}
+function quotaUnitForProvider(provider, fallback = "unlimited") {
+  if (provider.free_credit_usd_per_month !== void 0) return "usd";
+  if (provider.free_minutes_per_month !== void 0) return "minutes";
+  if (provider.unit_minutes_per_month !== void 0) return "unit_minutes";
+  return fallback;
+}
+function roundQuota(value) {
+  if (!Number.isFinite(value)) return value;
+  return Math.round(value * 1e4) / 1e4;
+}
+
 // src/providers.ts
 var VCPU_SIZES = [2, 4, 8, 16, 32];
 var providerFactories = {
@@ -91,7 +122,7 @@ var providerFactories = {
 };
 function getRunnerOption(providerId, provider, job) {
   if (provider.runner) {
-    return option(providerId, provider.runner, job.min_vcpu ?? 2, priceFor(providerId, job), job, quotaUnitFor(provider));
+    return option(providerId, provider.runner, job.min_vcpu ?? 2, priceFor(providerId, job), job, quotaUnitForProvider(provider));
   }
   const factory = providerFactories[providerId];
   return factory?.(provider, job);
@@ -100,12 +131,12 @@ function githubRunner(_provider, job) {
   const arch = job.arch ?? "x64";
   const label = githubLabel(job.os, arch);
   if (!label) return void 0;
-  return option("github", label, job.min_vcpu ?? 2, void 0, job, quotaUnitFor(_provider));
+  return option("github", label, job.min_vcpu ?? 2, void 0, job, quotaUnitForProvider(_provider));
 }
 function blacksmithRunner(provider, job) {
   const arch = job.arch ?? "x64";
   const vcpu = nearestVcpu(job.min_vcpu);
-  const quotaUnit = quotaUnitFor(provider);
+  const quotaUnit = quotaUnitForProvider(provider);
   if (job.os === "linux" && arch === "x64") {
     return option("blacksmith", `blacksmith-${vcpu}vcpu-ubuntu-2404`, vcpu, priceFor("blacksmith", job), job, quotaUnit);
   }
@@ -124,7 +155,7 @@ function blacksmithRunner(provider, job) {
 function ubicloudRunner(provider, job) {
   const arch = job.arch ?? "x64";
   const vcpu = nearestVcpu(job.min_vcpu, [2, 4, 8, 16, 30]);
-  const quotaUnit = quotaUnitFor(provider);
+  const quotaUnit = quotaUnitForProvider(provider);
   if (job.os !== "linux") return void 0;
   if (arch === "x64") {
     return option("ubicloud", `ubicloud-standard-${vcpu}`, vcpu, priceFor("ubicloud", job), job, quotaUnit);
@@ -134,7 +165,7 @@ function ubicloudRunner(provider, job) {
 function warpbuildRunner(provider, job) {
   const arch = job.arch ?? "x64";
   const vcpu = nearestVcpu(job.min_vcpu);
-  const quotaUnit = quotaUnitFor(provider);
+  const quotaUnit = quotaUnitForProvider(provider);
   if (job.os === "linux") {
     return option("warpbuild", `warp-ubuntu-latest-${arch}-${vcpu}x`, vcpu, priceFor("warpbuild", job), job, quotaUnit);
   }
@@ -150,25 +181,19 @@ function warpbuildRunner(provider, job) {
 }
 function namespaceRunner(provider, job) {
   if (provider.profile) {
-    return option("namespace", `namespace-profile-${provider.profile}`, job.min_vcpu ?? 4, void 0, job, quotaUnitFor(provider));
+    return option("namespace", `namespace-profile-${provider.profile}`, job.min_vcpu ?? 4, void 0, job, quotaUnitForProvider(provider));
   }
   const arch = job.arch === "arm64" ? "arm64" : "amd64";
   const vcpu = nearestVcpu(job.min_vcpu, [2, 4, 8, 16, 32]);
   const memory = vcpu * 2;
   const os = namespaceOs(job.os);
   if (!os) return void 0;
-  return option("namespace", `nscloud-${os}-${arch}-${vcpu}x${memory}`, vcpu, void 0, job, quotaUnitFor(provider, "unit_minutes"));
+  return option("namespace", `nscloud-${os}-${arch}-${vcpu}x${memory}`, vcpu, void 0, job, quotaUnitForProvider(provider, "unit_minutes"));
 }
 function option(provider, runner, vcpu, unitPriceUsd, job, quotaUnit) {
   const minutes = job.estimate_minutes ?? 10;
   const quotaBurn = quotaUnit === "unlimited" ? 0 : quotaUnit === "usd" ? minutes * (unitPriceUsd ?? 0) : unitBurn(provider, job.os, vcpu, minutes);
   return { provider, runner, vcpu, unitPriceUsd, quotaBurn, quotaUnit };
-}
-function quotaUnitFor(provider, fallback = "unlimited") {
-  if (provider.free_credit_usd_per_month !== void 0) return "usd";
-  if (provider.free_minutes_per_month !== void 0) return "minutes";
-  if (provider.unit_minutes_per_month !== void 0) return "unit_minutes";
-  return fallback;
 }
 function unitBurn(provider, os, vcpu, minutes) {
   if (provider === "namespace") return vcpu * minutes * platformMultiplier(os);
@@ -214,31 +239,6 @@ function namespaceOs(os) {
 }
 function nearestVcpu(min = 2, sizes = VCPU_SIZES) {
   return sizes.find((size) => size >= min) ?? sizes[sizes.length - 1];
-}
-
-// src/quota.ts
-function quotaFor(provider, unit, reserve = 0) {
-  const quota = rawQuotaFor(provider, unit);
-  return {
-    ...quota,
-    available: quota.total - quota.used - reserve
-  };
-}
-function rawQuotaFor(provider, unit) {
-  if (provider.free_credit_usd_per_month !== void 0) {
-    return { total: provider.free_credit_usd_per_month, used: provider.used_credit_usd ?? 0 };
-  }
-  if (provider.free_minutes_per_month !== void 0) {
-    return { total: provider.free_minutes_per_month, used: provider.used_minutes ?? 0 };
-  }
-  if (provider.unit_minutes_per_month !== void 0 || unit === "unit_minutes") {
-    return { total: provider.unit_minutes_per_month ?? 0, used: provider.used_unit_minutes ?? 0 };
-  }
-  return { total: Number.POSITIVE_INFINITY, used: 0 };
-}
-function roundQuota(value) {
-  if (!Number.isFinite(value)) return value;
-  return Math.round(value * 1e4) / 1e4;
 }
 
 // src/resolve.ts
