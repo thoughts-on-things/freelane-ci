@@ -18,9 +18,15 @@ npm pack --dry-run
 - Create or claim the `freelane-ci` package on npm.
 - Enable npm trusted publishing for GitHub Actions.
 - Set owner/repository to `thoughts-on-things/freelane-ci`.
-- Set workflow to `.github/workflows/release.yml`.
+- Set workflow filename to `release.yml`.
 - Leave environment blank unless the workflow later adds one.
 - Keep the package public.
+
+CLI equivalent after the package exists:
+
+```bash
+npm trust github freelane-ci --repo thoughts-on-things/freelane-ci --file release.yml --allow-publish
+```
 
 The release workflow also uploads the npm tarball and `SHA256SUMS` to the GitHub
 release and moves the major action tag, such as `v0`, to the new release tag so
