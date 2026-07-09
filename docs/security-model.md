@@ -29,3 +29,11 @@ providers.
 `freelane usage sync-github` reads workflow run and job history through the
 GitHub REST API. Public repositories can be read without a token. Private
 repositories need a token with Actions read permission.
+
+Minimum workflow permissions:
+
+```yaml
+permissions:
+  contents: read
+  actions: read
+```

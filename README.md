@@ -80,6 +80,9 @@ node dist/cli.js resolve --config examples/freelane.yml --job test-linux --forma
 node dist/cli.js providers doctor --config examples/freelane.yml
 ```
 
+For scheduled usage sync in GitHub Actions, see
+[examples/github-actions/freelane-usage-sync.yml](examples/github-actions/freelane-usage-sync.yml).
+
 ## Initial Providers
 
 - `github`

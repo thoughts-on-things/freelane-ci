@@ -52,6 +52,9 @@ GITHUB_TOKEN=... node dist/cli.js usage sync-github --repo owner/repo
 Routing commands automatically read `.freelane-usage.json` when it exists. Use
 `--no-usage-state` to ignore it.
 
+In GitHub Actions, grant the job `actions: read` and pass `${{ github.token }}`.
+See [examples/github-actions/freelane-usage-sync.yml](../examples/github-actions/freelane-usage-sync.yml).
+
 Preview all job routing with quota burn carried forward:
 
 ```bash
