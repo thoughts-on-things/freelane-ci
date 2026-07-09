@@ -40,7 +40,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/thoughts-on-things/freelane-ci.git"
+    "url": "git+https://github.com/thoughts-on-things/freelane-ci.git"
   },
   "bugs": {
     "url": "https://github.com/thoughts-on-things/freelane-ci/issues"

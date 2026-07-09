@@ -23,8 +23,10 @@ npm pack --dry-run
 - Keep the package public.
 
 The release workflow also uploads the npm tarball and `SHA256SUMS` to the GitHub
-release. After a successful publish, it moves the major action tag, such as
-`v0`, to the new release tag so workflow examples can stay on `@v0`.
+release and moves the major action tag, such as `v0`, to the new release tag so
+workflow examples can stay on `@v0`. It publishes the packed tarball to npm
+last, so GitHub release assets and action tags are still updated if npm needs
+owner setup.
 
 ## Release Flow
 
@@ -33,6 +35,10 @@ release. After a successful publish, it moves the major action tag, such as
 3. Merge the release PR.
 4. Watch the `release` workflow publish npm, upload release assets, and move the
    major action tag.
+
+If the first npm publish fails with `E404 Not Found`, create or claim the
+`freelane-ci` package in npm, confirm the trusted publisher settings above, and
+rerun the failed `Publish npm package` job.
 
 ## Dogfood
 

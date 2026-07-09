@@ -59,9 +59,6 @@ jobs:
       - name: Generate checksums
         run: sha256sum freelane-ci-*.tgz > SHA256SUMS
 
-      - name: Publish to npm
-        run: npm publish --provenance --access public
-
       - name: Upload npm tarball to GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -76,3 +73,6 @@ jobs:
           target="$(git rev-list -n 1 "$TAG_NAME")"
           git tag -f "$major" "$target"
           git push origin "refs/tags/$major" --force
+
+      - name: Publish to npm
+        run: npm publish --provenance --access public freelane-ci-*.tgz
