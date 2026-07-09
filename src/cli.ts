@@ -2,6 +2,7 @@
 import { loadConfig } from "./config";
 import { doctorConfig, formatDoctor } from "./doctor";
 import { formatDecision } from "./format";
+import { collectGitHubUsage, formatGitHubUsageState, writeGitHubUsageState } from "./github-usage";
 import { writeStarterConfig } from "./init";
 import { formatPlan, planFreelane } from "./plan";
 import { formatProviderList, listProviders } from "./provider-list";
@@ -13,13 +14,17 @@ interface Args {
   command?: string;
   subcommand?: string;
   config?: string;
+  days?: number;
   force?: boolean;
   job?: string;
+  limit?: number;
   output?: string;
+  repo?: string;
+  token?: string;
   format: "text" | "json" | "github-output";
 }
 
-function main(): void {
+async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
 
   if (args.command === "resolve") {
@@ -53,6 +58,20 @@ function main(): void {
     return;
   }
 
+  if (args.command === "usage" && args.subcommand === "sync-github") {
+    const repo = args.repo ?? process.env.GITHUB_REPOSITORY;
+    if (!repo) throw new Error("missing required --repo owner/repo");
+    const state = await collectGitHubUsage({
+      repo,
+      token: args.token ?? process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN,
+      days: args.days,
+      limit: args.limit
+    });
+    writeGitHubUsageState(state, args.output);
+    process.stdout.write(formatGitHubUsageState(state, args.format));
+    return;
+  }
+
   if (args.command === "config" && args.subcommand === "validate") {
     const result = validateConfigFile(args.config);
     process.stdout.write(formatValidation(result, args.format));
@@ -81,9 +100,13 @@ function parseArgs(argv: string[]): Args {
     const value = argv[i];
     if (value === "--help" || value === "-h") usage(0);
     if (value === "--config") args.config = argv[++i];
+    else if (value === "--days") args.days = parsePositiveInt(argv[++i], "--days");
     else if (value === "--force") args.force = true;
     else if (value === "--job") args.job = argv[++i];
+    else if (value === "--limit") args.limit = parsePositiveInt(argv[++i], "--limit");
     else if (value === "--output") args.output = argv[++i];
+    else if (value === "--repo") args.repo = argv[++i];
+    else if (value === "--token") args.token = argv[++i];
     else if (value === "--format") args.format = parseFormat(argv[++i]);
     else throw new Error(`unknown argument: ${value}`);
   }
@@ -95,6 +118,12 @@ function parseFormat(value: string): Args["format"] {
   throw new Error(`unsupported format: ${value}`);
 }
 
+function parsePositiveInt(value: string, flag: string): number {
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed <= 0) throw new Error(`${flag} must be a positive integer`);
+  return parsed;
+}
+
 function usage(code: number): never {
   process.stdout.write([
     "Usage:",
@@ -104,15 +133,14 @@ function usage(code: number): never {
     "  freelane resolve --job <job> [--config .freelane.yml] [--format text|json|github-output]",
     "  freelane providers doctor [--config .freelane.yml] [--format text|json]",
     "  freelane providers list [--format text|json]",
-    "  freelane usage report [--config .freelane.yml] [--format text|json]"
+    "  freelane usage report [--config .freelane.yml] [--format text|json]",
+    "  freelane usage sync-github [--repo owner/repo] [--days 30] [--limit 50] [--output .freelane-usage.json] [--format text|json]"
   ].join("\n") + "\n");
   process.exit(code);
 }
 
-try {
-  main();
-} catch (error) {
+void main().catch((error) => {
   const message = error instanceof Error ? error.message : String(error);
   process.stderr.write(`freelane: ${message}\n`);
   process.exit(1);
-}
+});

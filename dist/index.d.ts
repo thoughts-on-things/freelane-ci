@@ -91,6 +91,55 @@ declare const CONFIG_SCHEMA_URL = "https://raw.githubusercontent.com/freelane-ci
 
 declare function formatDecision(decision: RoutingDecision, format: string): string;
 
+interface GitHubUsageOptions {
+    repo: string;
+    token?: string;
+    days?: number;
+    limit?: number;
+    output?: string;
+    apiUrl?: string;
+    now?: Date;
+    fetchImpl?: FetchLike;
+}
+interface GitHubUsageJob {
+    runId: number;
+    jobId: number;
+    name: string;
+    workflowName?: string;
+    conclusion?: string;
+    provider: string;
+    labels: string[];
+    startedAt: string;
+    completedAt: string;
+    durationMinutes: number;
+}
+interface GitHubUsageProviderTotal {
+    jobs: number;
+    minutes: number;
+}
+interface GitHubUsageState {
+    source: "github-actions";
+    repository: string;
+    generatedAt: string;
+    since: string;
+    runCount: number;
+    jobCount: number;
+    providers: Record<string, GitHubUsageProviderTotal>;
+    jobs: GitHubUsageJob[];
+}
+type FetchLike = (url: string, init?: {
+    headers?: Record<string, string>;
+}) => Promise<{
+    ok: boolean;
+    status: number;
+    statusText: string;
+    json(): Promise<unknown>;
+}>;
+declare function collectGitHubUsage(options: GitHubUsageOptions): Promise<GitHubUsageState>;
+declare function writeGitHubUsageState(state: GitHubUsageState, output?: string): string;
+declare function formatGitHubUsageState(state: GitHubUsageState, format: string): string;
+declare function inferProvider(labels: string[], runnerName?: string, runnerGroupName?: string): string;
+
 interface InitOptions {
     output?: string;
     force?: boolean;
@@ -161,4 +210,4 @@ interface UsageReport {
 declare function usageReport(config: FreelaneConfig): UsageReport;
 declare function formatUsageReport(report: UsageReport, format: string): string;
 
-export { CONFIG_SCHEMA_URL, type Candidate, type DefaultsConfig, type FreelaneConfig, type JobConfig, type PaidPolicy, type ProviderConfig, type QuotaUnit, type RoutingDecision, type RunnerArch, type RunnerOption, type RunnerOs, displayUnit, doctorConfig, findConfigPath, formatDecision, formatDoctor, formatPlan, formatProviderList, formatUsageReport, formatValidation, getRunnerOption, listProviders, loadConfig, planFreelane, providerFactories, quotaFor, resolveFreelane, roundQuota, starterConfig, usageReport, validateConfigFile, writeStarterConfig };
+export { CONFIG_SCHEMA_URL, type Candidate, type DefaultsConfig, type FreelaneConfig, type JobConfig, type PaidPolicy, type ProviderConfig, type QuotaUnit, type RoutingDecision, type RunnerArch, type RunnerOption, type RunnerOs, collectGitHubUsage, displayUnit, doctorConfig, findConfigPath, formatDecision, formatDoctor, formatGitHubUsageState, formatPlan, formatProviderList, formatUsageReport, formatValidation, getRunnerOption, inferProvider, listProviders, loadConfig, planFreelane, providerFactories, quotaFor, resolveFreelane, roundQuota, starterConfig, usageReport, validateConfigFile, writeGitHubUsageState, writeStarterConfig };

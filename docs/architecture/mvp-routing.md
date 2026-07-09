@@ -62,6 +62,7 @@ freelane plan
 freelane resolve --job test-linux --format github-output
 freelane providers doctor
 freelane usage report
+freelane usage sync-github
 ```
 
 ### Config Parser

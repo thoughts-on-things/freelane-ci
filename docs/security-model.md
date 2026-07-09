@@ -17,8 +17,15 @@ network access, and logs.
 - Use GitHub environments for sensitive deploy credentials.
 - Review provider terms, data location, and isolation guarantees.
 - Prefer pinned runner labels for sensitive workloads.
+- Give usage sync tokens Actions read permission only.
 
 ## Non-Goals
 
 Freelane does not create provider accounts, bypass quotas, or hide usage from CI
 providers.
+
+## GitHub Usage Sync
+
+`freelane usage sync-github` reads workflow run and job history through the
+GitHub REST API. Public repositories can be read without a token. Private
+repositories need a token with Actions read permission.

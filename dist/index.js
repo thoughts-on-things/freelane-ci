@@ -31,16 +31,19 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 var index_exports = {};
 __export(index_exports, {
   CONFIG_SCHEMA_URL: () => CONFIG_SCHEMA_URL,
+  collectGitHubUsage: () => collectGitHubUsage,
   displayUnit: () => displayUnit,
   doctorConfig: () => doctorConfig,
   findConfigPath: () => findConfigPath,
   formatDecision: () => formatDecision,
   formatDoctor: () => formatDoctor,
+  formatGitHubUsageState: () => formatGitHubUsageState,
   formatPlan: () => formatPlan,
   formatProviderList: () => formatProviderList,
   formatUsageReport: () => formatUsageReport,
   formatValidation: () => formatValidation,
   getRunnerOption: () => getRunnerOption,
+  inferProvider: () => inferProvider,
   listProviders: () => listProviders,
   loadConfig: () => loadConfig,
   planFreelane: () => planFreelane,
@@ -51,6 +54,7 @@ __export(index_exports, {
   starterConfig: () => starterConfig,
   usageReport: () => usageReport,
   validateConfigFile: () => validateConfigFile,
+  writeGitHubUsageState: () => writeGitHubUsageState,
   writeStarterConfig: () => writeStarterConfig
 });
 module.exports = __toCommonJS(index_exports);
@@ -345,9 +349,161 @@ function formatDecision(decision2, format) {
 `;
 }
 
-// src/init.ts
+// src/github-usage.ts
 var import_node_fs2 = require("fs");
 var import_node_path2 = require("path");
+var DEFAULT_DAYS = 30;
+var DEFAULT_LIMIT = 50;
+async function collectGitHubUsage(options) {
+  const repository = normalizeRepo(options.repo);
+  const [owner, repo] = repository.split("/");
+  const apiUrl = (options.apiUrl ?? "https://api.github.com").replace(/\/$/, "");
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const now = options.now ?? /* @__PURE__ */ new Date();
+  const days = options.days ?? DEFAULT_DAYS;
+  const limit = options.limit ?? DEFAULT_LIMIT;
+  const since = new Date(now.getTime() - days * 24 * 60 * 60 * 1e3);
+  const headers = githubHeaders(options.token);
+  const runs = await listRuns({ apiUrl, owner, repo, since, limit, headers, fetchImpl });
+  const jobs = [];
+  for (const run of runs) {
+    const runJobs = await listJobs({ apiUrl, owner, repo, runId: run.id, headers, fetchImpl });
+    for (const job of runJobs) {
+      const usageJob = usageJobFromWorkflowJob(job);
+      if (usageJob) jobs.push(usageJob);
+    }
+  }
+  return {
+    source: "github-actions",
+    repository,
+    generatedAt: now.toISOString(),
+    since: since.toISOString(),
+    runCount: runs.length,
+    jobCount: jobs.length,
+    providers: providerTotals(jobs),
+    jobs
+  };
+}
+function writeGitHubUsageState(state, output = ".freelane-usage.json") {
+  const path = (0, import_node_path2.resolve)(output);
+  (0, import_node_fs2.writeFileSync)(path, `${JSON.stringify(state, null, 2)}
+`, "utf8");
+  return path;
+}
+function formatGitHubUsageState(state, format) {
+  if (format === "json") return `${JSON.stringify(state, null, 2)}
+`;
+  const rows = Object.entries(state.providers).sort(([left], [right]) => left.localeCompare(right)).map(([provider, total]) => `${provider}	${total.jobs}	${total.minutes}`);
+  return [
+    `repository	${state.repository}`,
+    `since	${state.since}`,
+    `runs	${state.runCount}`,
+    `jobs	${state.jobCount}`,
+    "",
+    "provider	jobs	minutes",
+    ...rows
+  ].join("\n") + "\n";
+}
+function inferProvider(labels, runnerName = "", runnerGroupName = "") {
+  const haystack = [...labels, runnerName, runnerGroupName].join(" ").toLowerCase();
+  if (haystack.includes("blacksmith")) return "blacksmith";
+  if (haystack.includes("ubicloud")) return "ubicloud";
+  if (haystack.includes("warpbuild") || /\bwarp-/.test(haystack)) return "warpbuild";
+  if (haystack.includes("namespace") || haystack.includes("nscloud")) return "namespace";
+  if (labels.some((label) => isGitHubHostedLabel(label))) return "github";
+  return "unknown";
+}
+function usageJobFromWorkflowJob(job) {
+  if (!job.started_at || !job.completed_at) return void 0;
+  const started = Date.parse(job.started_at);
+  const completed = Date.parse(job.completed_at);
+  if (!Number.isFinite(started) || !Number.isFinite(completed) || completed < started) return void 0;
+  const labels = job.labels ?? [];
+  const durationMinutes = roundQuota((completed - started) / 6e4);
+  return {
+    runId: job.run_id,
+    jobId: job.id,
+    name: job.name,
+    workflowName: job.workflow_name,
+    conclusion: job.conclusion,
+    provider: inferProvider(labels, job.runner_name, job.runner_group_name),
+    labels,
+    startedAt: job.started_at,
+    completedAt: job.completed_at,
+    durationMinutes
+  };
+}
+function providerTotals(jobs) {
+  const totals = {};
+  for (const job of jobs) {
+    const total = totals[job.provider] ?? { jobs: 0, minutes: 0 };
+    total.jobs += 1;
+    total.minutes = roundQuota(total.minutes + job.durationMinutes);
+    totals[job.provider] = total;
+  }
+  return totals;
+}
+async function listRuns(options) {
+  const runs = [];
+  let page = 1;
+  while (runs.length < options.limit) {
+    const perPage = Math.min(100, options.limit - runs.length);
+    const url = new URL(`${options.apiUrl}/repos/${options.owner}/${options.repo}/actions/runs`);
+    url.searchParams.set("status", "completed");
+    url.searchParams.set("created", `>=${options.since.toISOString()}`);
+    url.searchParams.set("per_page", String(perPage));
+    url.searchParams.set("page", String(page));
+    const response = await requestJson(options.fetchImpl, url.toString(), options.headers);
+    const pageRuns = response.workflow_runs ?? [];
+    runs.push(...pageRuns);
+    if (pageRuns.length < perPage) break;
+    page += 1;
+  }
+  return runs;
+}
+async function listJobs(options) {
+  const jobs = [];
+  let page = 1;
+  while (true) {
+    const url = new URL(`${options.apiUrl}/repos/${options.owner}/${options.repo}/actions/runs/${options.runId}/jobs`);
+    url.searchParams.set("per_page", "100");
+    url.searchParams.set("page", String(page));
+    const response = await requestJson(options.fetchImpl, url.toString(), options.headers);
+    const pageJobs = response.jobs ?? [];
+    jobs.push(...pageJobs);
+    if (pageJobs.length < 100) break;
+    page += 1;
+  }
+  return jobs;
+}
+async function requestJson(fetchImpl, url, headers) {
+  const response = await fetchImpl(url, { headers });
+  if (!response.ok) {
+    throw new Error(`GitHub API request failed: ${response.status} ${response.statusText}`);
+  }
+  return response.json();
+}
+function githubHeaders(token) {
+  const headers = {
+    Accept: "application/vnd.github+json",
+    "User-Agent": "freelane-ci"
+  };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  return headers;
+}
+function normalizeRepo(repo) {
+  if (!/^[^/]+\/[^/]+$/.test(repo)) {
+    throw new Error("--repo must use owner/repo");
+  }
+  return repo;
+}
+function isGitHubHostedLabel(label) {
+  return /^(ubuntu|windows|macos)-/.test(label.toLowerCase());
+}
+
+// src/init.ts
+var import_node_fs3 = require("fs");
+var import_node_path3 = require("path");
 function starterConfig() {
   return [
     `$schema: ${CONFIG_SCHEMA_URL}`,
@@ -386,11 +542,11 @@ function starterConfig() {
   ].join("\n");
 }
 function writeStarterConfig(options = {}) {
-  const output = (0, import_node_path2.resolve)(options.cwd ?? process.cwd(), options.output ?? ".freelane.yml");
-  if ((0, import_node_fs2.existsSync)(output) && !options.force) {
+  const output = (0, import_node_path3.resolve)(options.cwd ?? process.cwd(), options.output ?? ".freelane.yml");
+  if ((0, import_node_fs3.existsSync)(output) && !options.force) {
     throw new Error(`${output} already exists; pass --force to overwrite`);
   }
-  (0, import_node_fs2.writeFileSync)(output, starterConfig(), "utf8");
+  (0, import_node_fs3.writeFileSync)(output, starterConfig(), "utf8");
   return output;
 }
 
@@ -574,7 +730,7 @@ function formatProviderList(items, format) {
 
 // src/schema.ts
 var import__ = __toESM(require("ajv/dist/2020"));
-var import_node_fs3 = require("fs");
+var import_node_fs4 = require("fs");
 var import_yaml2 = require("yaml");
 
 // schemas/freelane.schema.json
@@ -755,7 +911,7 @@ var freelane_schema_default = {
 
 // src/schema.ts
 function validateConfigFile(path = findConfigPath()) {
-  const config = (0, import_yaml2.parse)((0, import_node_fs3.readFileSync)(path, "utf8"));
+  const config = (0, import_yaml2.parse)((0, import_node_fs4.readFileSync)(path, "utf8"));
   const ajv = new import__.default({ allErrors: true });
   const validate = ajv.compile(freelane_schema_default);
   const schemaValid = validate(config);
@@ -870,16 +1026,19 @@ function formatAmount(value, unit) {
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   CONFIG_SCHEMA_URL,
+  collectGitHubUsage,
   displayUnit,
   doctorConfig,
   findConfigPath,
   formatDecision,
   formatDoctor,
+  formatGitHubUsageState,
   formatPlan,
   formatProviderList,
   formatUsageReport,
   formatValidation,
   getRunnerOption,
+  inferProvider,
   listProviders,
   loadConfig,
   planFreelane,
@@ -890,5 +1049,6 @@ function formatAmount(value, unit) {
   starterConfig,
   usageReport,
   validateConfigFile,
+  writeGitHubUsageState,
   writeStarterConfig
 });

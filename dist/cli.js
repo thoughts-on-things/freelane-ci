@@ -310,9 +310,161 @@ function formatDecision(decision2, format) {
 `;
 }
 
-// src/init.ts
+// src/github-usage.ts
 var import_node_fs2 = require("fs");
 var import_node_path2 = require("path");
+var DEFAULT_DAYS = 30;
+var DEFAULT_LIMIT = 50;
+async function collectGitHubUsage(options) {
+  const repository = normalizeRepo(options.repo);
+  const [owner, repo] = repository.split("/");
+  const apiUrl = (options.apiUrl ?? "https://api.github.com").replace(/\/$/, "");
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const now = options.now ?? /* @__PURE__ */ new Date();
+  const days = options.days ?? DEFAULT_DAYS;
+  const limit = options.limit ?? DEFAULT_LIMIT;
+  const since = new Date(now.getTime() - days * 24 * 60 * 60 * 1e3);
+  const headers = githubHeaders(options.token);
+  const runs = await listRuns({ apiUrl, owner, repo, since, limit, headers, fetchImpl });
+  const jobs = [];
+  for (const run of runs) {
+    const runJobs = await listJobs({ apiUrl, owner, repo, runId: run.id, headers, fetchImpl });
+    for (const job of runJobs) {
+      const usageJob = usageJobFromWorkflowJob(job);
+      if (usageJob) jobs.push(usageJob);
+    }
+  }
+  return {
+    source: "github-actions",
+    repository,
+    generatedAt: now.toISOString(),
+    since: since.toISOString(),
+    runCount: runs.length,
+    jobCount: jobs.length,
+    providers: providerTotals(jobs),
+    jobs
+  };
+}
+function writeGitHubUsageState(state, output = ".freelane-usage.json") {
+  const path = (0, import_node_path2.resolve)(output);
+  (0, import_node_fs2.writeFileSync)(path, `${JSON.stringify(state, null, 2)}
+`, "utf8");
+  return path;
+}
+function formatGitHubUsageState(state, format) {
+  if (format === "json") return `${JSON.stringify(state, null, 2)}
+`;
+  const rows = Object.entries(state.providers).sort(([left], [right]) => left.localeCompare(right)).map(([provider, total]) => `${provider}	${total.jobs}	${total.minutes}`);
+  return [
+    `repository	${state.repository}`,
+    `since	${state.since}`,
+    `runs	${state.runCount}`,
+    `jobs	${state.jobCount}`,
+    "",
+    "provider	jobs	minutes",
+    ...rows
+  ].join("\n") + "\n";
+}
+function inferProvider(labels, runnerName = "", runnerGroupName = "") {
+  const haystack = [...labels, runnerName, runnerGroupName].join(" ").toLowerCase();
+  if (haystack.includes("blacksmith")) return "blacksmith";
+  if (haystack.includes("ubicloud")) return "ubicloud";
+  if (haystack.includes("warpbuild") || /\bwarp-/.test(haystack)) return "warpbuild";
+  if (haystack.includes("namespace") || haystack.includes("nscloud")) return "namespace";
+  if (labels.some((label) => isGitHubHostedLabel(label))) return "github";
+  return "unknown";
+}
+function usageJobFromWorkflowJob(job) {
+  if (!job.started_at || !job.completed_at) return void 0;
+  const started = Date.parse(job.started_at);
+  const completed = Date.parse(job.completed_at);
+  if (!Number.isFinite(started) || !Number.isFinite(completed) || completed < started) return void 0;
+  const labels = job.labels ?? [];
+  const durationMinutes = roundQuota((completed - started) / 6e4);
+  return {
+    runId: job.run_id,
+    jobId: job.id,
+    name: job.name,
+    workflowName: job.workflow_name,
+    conclusion: job.conclusion,
+    provider: inferProvider(labels, job.runner_name, job.runner_group_name),
+    labels,
+    startedAt: job.started_at,
+    completedAt: job.completed_at,
+    durationMinutes
+  };
+}
+function providerTotals(jobs) {
+  const totals = {};
+  for (const job of jobs) {
+    const total = totals[job.provider] ?? { jobs: 0, minutes: 0 };
+    total.jobs += 1;
+    total.minutes = roundQuota(total.minutes + job.durationMinutes);
+    totals[job.provider] = total;
+  }
+  return totals;
+}
+async function listRuns(options) {
+  const runs = [];
+  let page = 1;
+  while (runs.length < options.limit) {
+    const perPage = Math.min(100, options.limit - runs.length);
+    const url = new URL(`${options.apiUrl}/repos/${options.owner}/${options.repo}/actions/runs`);
+    url.searchParams.set("status", "completed");
+    url.searchParams.set("created", `>=${options.since.toISOString()}`);
+    url.searchParams.set("per_page", String(perPage));
+    url.searchParams.set("page", String(page));
+    const response = await requestJson(options.fetchImpl, url.toString(), options.headers);
+    const pageRuns = response.workflow_runs ?? [];
+    runs.push(...pageRuns);
+    if (pageRuns.length < perPage) break;
+    page += 1;
+  }
+  return runs;
+}
+async function listJobs(options) {
+  const jobs = [];
+  let page = 1;
+  while (true) {
+    const url = new URL(`${options.apiUrl}/repos/${options.owner}/${options.repo}/actions/runs/${options.runId}/jobs`);
+    url.searchParams.set("per_page", "100");
+    url.searchParams.set("page", String(page));
+    const response = await requestJson(options.fetchImpl, url.toString(), options.headers);
+    const pageJobs = response.jobs ?? [];
+    jobs.push(...pageJobs);
+    if (pageJobs.length < 100) break;
+    page += 1;
+  }
+  return jobs;
+}
+async function requestJson(fetchImpl, url, headers) {
+  const response = await fetchImpl(url, { headers });
+  if (!response.ok) {
+    throw new Error(`GitHub API request failed: ${response.status} ${response.statusText}`);
+  }
+  return response.json();
+}
+function githubHeaders(token) {
+  const headers = {
+    Accept: "application/vnd.github+json",
+    "User-Agent": "freelane-ci"
+  };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  return headers;
+}
+function normalizeRepo(repo) {
+  if (!/^[^/]+\/[^/]+$/.test(repo)) {
+    throw new Error("--repo must use owner/repo");
+  }
+  return repo;
+}
+function isGitHubHostedLabel(label) {
+  return /^(ubuntu|windows|macos)-/.test(label.toLowerCase());
+}
+
+// src/init.ts
+var import_node_fs3 = require("fs");
+var import_node_path3 = require("path");
 
 // src/constants.ts
 var CONFIG_SCHEMA_URL = "https://raw.githubusercontent.com/freelane-ci/freelane/main/schemas/freelane.schema.json";
@@ -356,11 +508,11 @@ function starterConfig() {
   ].join("\n");
 }
 function writeStarterConfig(options = {}) {
-  const output = (0, import_node_path2.resolve)(options.cwd ?? process.cwd(), options.output ?? ".freelane.yml");
-  if ((0, import_node_fs2.existsSync)(output) && !options.force) {
+  const output = (0, import_node_path3.resolve)(options.cwd ?? process.cwd(), options.output ?? ".freelane.yml");
+  if ((0, import_node_fs3.existsSync)(output) && !options.force) {
     throw new Error(`${output} already exists; pass --force to overwrite`);
   }
-  (0, import_node_fs2.writeFileSync)(output, starterConfig(), "utf8");
+  (0, import_node_fs3.writeFileSync)(output, starterConfig(), "utf8");
   return output;
 }
 
@@ -544,7 +696,7 @@ function formatProviderList(items, format) {
 
 // src/schema.ts
 var import__ = __toESM(require("ajv/dist/2020"));
-var import_node_fs3 = require("fs");
+var import_node_fs4 = require("fs");
 var import_yaml2 = require("yaml");
 
 // schemas/freelane.schema.json
@@ -725,7 +877,7 @@ var freelane_schema_default = {
 
 // src/schema.ts
 function validateConfigFile(path = findConfigPath()) {
-  const config = (0, import_yaml2.parse)((0, import_node_fs3.readFileSync)(path, "utf8"));
+  const config = (0, import_yaml2.parse)((0, import_node_fs4.readFileSync)(path, "utf8"));
   const ajv = new import__.default({ allErrors: true });
   const validate = ajv.compile(freelane_schema_default);
   const schemaValid = validate(config);
@@ -839,7 +991,7 @@ function formatAmount(value, unit) {
 }
 
 // src/cli.ts
-function main() {
+async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.command === "resolve") {
     if (!args.job) throw new Error("missing required --job");
@@ -867,6 +1019,19 @@ function main() {
     process.stdout.write(formatUsageReport(usageReport(config), args.format));
     return;
   }
+  if (args.command === "usage" && args.subcommand === "sync-github") {
+    const repo = args.repo ?? process.env.GITHUB_REPOSITORY;
+    if (!repo) throw new Error("missing required --repo owner/repo");
+    const state = await collectGitHubUsage({
+      repo,
+      token: args.token ?? process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN,
+      days: args.days,
+      limit: args.limit
+    });
+    writeGitHubUsageState(state, args.output);
+    process.stdout.write(formatGitHubUsageState(state, args.format));
+    return;
+  }
   if (args.command === "config" && args.subcommand === "validate") {
     const result = validateConfigFile(args.config);
     process.stdout.write(formatValidation(result, args.format));
@@ -892,9 +1057,13 @@ function parseArgs(argv) {
     const value = argv[i];
     if (value === "--help" || value === "-h") usage(0);
     if (value === "--config") args.config = argv[++i];
+    else if (value === "--days") args.days = parsePositiveInt(argv[++i], "--days");
     else if (value === "--force") args.force = true;
     else if (value === "--job") args.job = argv[++i];
+    else if (value === "--limit") args.limit = parsePositiveInt(argv[++i], "--limit");
     else if (value === "--output") args.output = argv[++i];
+    else if (value === "--repo") args.repo = argv[++i];
+    else if (value === "--token") args.token = argv[++i];
     else if (value === "--format") args.format = parseFormat(argv[++i]);
     else throw new Error(`unknown argument: ${value}`);
   }
@@ -903,6 +1072,11 @@ function parseArgs(argv) {
 function parseFormat(value) {
   if (value === "text" || value === "json" || value === "github-output") return value;
   throw new Error(`unsupported format: ${value}`);
+}
+function parsePositiveInt(value, flag) {
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed <= 0) throw new Error(`${flag} must be a positive integer`);
+  return parsed;
 }
 function usage(code) {
   process.stdout.write([
@@ -913,15 +1087,14 @@ function usage(code) {
     "  freelane resolve --job <job> [--config .freelane.yml] [--format text|json|github-output]",
     "  freelane providers doctor [--config .freelane.yml] [--format text|json]",
     "  freelane providers list [--format text|json]",
-    "  freelane usage report [--config .freelane.yml] [--format text|json]"
+    "  freelane usage report [--config .freelane.yml] [--format text|json]",
+    "  freelane usage sync-github [--repo owner/repo] [--days 30] [--limit 50] [--output .freelane-usage.json] [--format text|json]"
   ].join("\n") + "\n");
   process.exit(code);
 }
-try {
-  main();
-} catch (error) {
+void main().catch((error) => {
   const message = error instanceof Error ? error.message : String(error);
   process.stderr.write(`freelane: ${message}
 `);
   process.exit(1);
-}
+});

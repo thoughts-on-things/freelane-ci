@@ -43,6 +43,12 @@ Report configured quota state:
 node dist/cli.js usage report --config examples/freelane.yml
 ```
 
+Sync recent GitHub Actions history into local state:
+
+```bash
+GITHUB_TOKEN=... node dist/cli.js usage sync-github --repo owner/repo
+```
+
 Preview all job routing with quota burn carried forward:
 
 ```bash
