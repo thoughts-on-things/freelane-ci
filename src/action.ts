@@ -1,10 +1,18 @@
 import * as core from "@actions/core";
 import { loadConfig } from "./config";
 import { resolveFreelane } from "./resolve";
+import { formatValidation, validateConfigFile } from "./schema";
 
 async function run(): Promise<void> {
   const job = core.getInput("job", { required: true });
   const configPath = core.getInput("config") || ".freelane.yml";
+  const shouldValidate = core.getBooleanInput("validate");
+
+  if (shouldValidate) {
+    const validation = validateConfigFile(configPath);
+    if (!validation.valid) throw new Error(formatValidation(validation, "text").trim());
+  }
+
   const config = loadConfig(configPath);
   const decision = resolveFreelane(config, job);
 

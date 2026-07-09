@@ -49,3 +49,6 @@ Freelane must run before the job it routes because GitHub chooses a runner befor
 job steps execute.
 
 See [examples/github-actions/freelane-routed.yml](../examples/github-actions/freelane-routed.yml).
+
+The action validates config by default. Set `validate: false` only when testing
+future config fields locally.

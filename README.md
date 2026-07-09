@@ -55,6 +55,7 @@ jobs:
         uses: freelane-ci/freelane/action@v0
         with:
           job: test-linux
+          validate: true
 
   test:
     needs: freelane

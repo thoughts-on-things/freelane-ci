@@ -313,10 +313,268 @@ function directDecision(jobId, job) {
   };
 }
 
+// src/schema.ts
+var import__ = __toESM(require("ajv/dist/2020"));
+var import_node_fs2 = require("fs");
+var import_yaml2 = require("yaml");
+
+// schemas/freelane.schema.json
+var freelane_schema_default = {
+  $schema: "https://json-schema.org/draft/2020-12/schema",
+  $id: "https://freelane-ci.dev/schemas/freelane.schema.json",
+  title: "Freelane CI config",
+  type: "object",
+  required: ["version", "providers", "jobs"],
+  additionalProperties: false,
+  properties: {
+    $schema: {
+      type: "string"
+    },
+    version: {
+      const: 1
+    },
+    defaults: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        paid: {
+          enum: ["avoid", "allow", "forbid"]
+        },
+        reserve: {
+          type: "object",
+          additionalProperties: {
+            type: "number",
+            minimum: 0
+          }
+        },
+        fallback: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            mode: {
+              const: "pre_schedule"
+            },
+            providers: {
+              type: "array",
+              items: {
+                type: "string",
+                minLength: 1
+              }
+            }
+          }
+        },
+        alerts: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            github_summary: {
+              type: "boolean"
+            },
+            github_warning: {
+              type: "boolean"
+            },
+            webhook_url: {
+              type: "string"
+            }
+          }
+        }
+      }
+    },
+    providers: {
+      type: "object",
+      minProperties: 1,
+      additionalProperties: {
+        $ref: "#/$defs/provider"
+      }
+    },
+    jobs: {
+      type: "object",
+      minProperties: 1,
+      additionalProperties: {
+        $ref: "#/$defs/job"
+      }
+    }
+  },
+  $defs: {
+    runner: {
+      oneOf: [
+        {
+          type: "string",
+          minLength: 1
+        },
+        {
+          type: "array",
+          items: {
+            type: "string",
+            minLength: 1
+          },
+          minItems: 1
+        }
+      ]
+    },
+    provider: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        enabled: {
+          type: "boolean"
+        },
+        free_minutes_per_month: {
+          type: "number",
+          minimum: 0
+        },
+        free_credit_usd_per_month: {
+          type: "number",
+          minimum: 0
+        },
+        unit_minutes_per_month: {
+          type: "number",
+          minimum: 0
+        },
+        used_minutes: {
+          type: "number",
+          minimum: 0
+        },
+        used_credit_usd: {
+          type: "number",
+          minimum: 0
+        },
+        used_unit_minutes: {
+          type: "number",
+          minimum: 0
+        },
+        runner: {
+          $ref: "#/$defs/runner"
+        },
+        profile: {
+          type: "string",
+          minLength: 1
+        },
+        owner: {
+          type: "string",
+          minLength: 1
+        },
+        scope: {
+          enum: ["user", "org", "enterprise"]
+        }
+      }
+    },
+    job: {
+      type: "object",
+      required: ["os"],
+      additionalProperties: false,
+      properties: {
+        os: {
+          enum: ["linux", "windows", "macos"]
+        },
+        arch: {
+          enum: ["x64", "arm64"]
+        },
+        min_vcpu: {
+          type: "number",
+          minimum: 1
+        },
+        estimate_minutes: {
+          type: "number",
+          minimum: 0
+        },
+        providers: {
+          type: "array",
+          items: {
+            type: "string",
+            minLength: 1
+          },
+          minItems: 1
+        },
+        runner: {
+          $ref: "#/$defs/runner"
+        }
+      }
+    }
+  }
+};
+
+// src/schema.ts
+function validateConfigFile(path = findConfigPath()) {
+  const config = (0, import_yaml2.parse)((0, import_node_fs2.readFileSync)(path, "utf8"));
+  const ajv = new import__.default({ allErrors: true });
+  const validate = ajv.compile(freelane_schema_default);
+  const schemaValid = validate(config);
+  const issues = [
+    ...(validate.errors ?? []).map((error) => ({
+      path: error.instancePath || "/",
+      message: error.message ?? "invalid value"
+    })),
+    ...semanticIssues(config)
+  ];
+  return {
+    valid: schemaValid && issues.length === 0,
+    path,
+    issues
+  };
+}
+function formatValidation(result, format) {
+  if (format === "json") return `${JSON.stringify(result, null, 2)}
+`;
+  if (result.valid) return `valid ${result.path}
+`;
+  return [
+    `invalid ${result.path}`,
+    ...result.issues.map((issue) => `- ${issue.path} ${issue.message}`)
+  ].join("\n") + "\n";
+}
+function semanticIssues(config) {
+  if (!isRecord2(config) || !isRecord2(config.providers) || !isRecord2(config.jobs)) return [];
+  const issues = [];
+  const providerIds = new Set(Object.keys(config.providers));
+  if (isRecord2(config.defaults)) {
+    if (isRecord2(config.defaults.reserve)) {
+      for (const providerId of Object.keys(config.defaults.reserve)) {
+        if (!providerIds.has(providerId)) {
+          issues.push({
+            path: pointer("defaults", "reserve", providerId),
+            message: `references unknown provider "${providerId}"`
+          });
+        }
+      }
+    }
+    if (isRecord2(config.defaults.fallback)) {
+      issues.push(...providerReferenceIssues(config.defaults.fallback.providers, pointer("defaults", "fallback", "providers"), providerIds));
+    }
+  }
+  for (const [jobId, job] of Object.entries(config.jobs)) {
+    if (isRecord2(job)) {
+      issues.push(...providerReferenceIssues(job.providers, pointer("jobs", jobId, "providers"), providerIds));
+    }
+  }
+  return issues;
+}
+function providerReferenceIssues(value, path, providerIds) {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((providerId, index) => {
+    if (typeof providerId !== "string" || providerIds.has(providerId)) return [];
+    return [{
+      path: `${path}/${index}`,
+      message: `references unknown provider "${providerId}"`
+    }];
+  });
+}
+function pointer(...segments) {
+  return `/${segments.map((segment) => segment.replace(/~/g, "~0").replace(/\//g, "~1")).join("/")}`;
+}
+function isRecord2(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 // src/action.ts
 async function run() {
   const job = core.getInput("job", { required: true });
   const configPath = core.getInput("config") || ".freelane.yml";
+  const shouldValidate = core.getBooleanInput("validate");
+  if (shouldValidate) {
+    const validation = validateConfigFile(configPath);
+    if (!validation.valid) throw new Error(formatValidation(validation, "text").trim());
+  }
   const config = loadConfig(configPath);
   const decision2 = resolveFreelane(config, job);
   core.setOutput("runs_on", decision2.runsOnJson);

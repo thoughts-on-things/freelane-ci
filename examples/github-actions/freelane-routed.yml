@@ -20,6 +20,7 @@ jobs:
         with:
           config: examples/freelane.yml
           job: test-linux
+          validate: true
 
   test:
     needs:

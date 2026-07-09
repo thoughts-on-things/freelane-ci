@@ -10,6 +10,10 @@ inputs:
     description: Path to the Freelane config file.
     required: false
     default: .freelane.yml
+  validate:
+    description: Validate config schema and provider references before resolving.
+    required: false
+    default: "true"
 
 outputs:
   runs_on:
