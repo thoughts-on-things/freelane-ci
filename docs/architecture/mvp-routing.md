@@ -58,6 +58,7 @@ Thin GitHub Action entrypoint that:
 The action should call a CLI so users can also run:
 
 ```bash
+freelane plan
 freelane resolve --job test-linux --format github-output
 freelane providers doctor
 freelane usage report

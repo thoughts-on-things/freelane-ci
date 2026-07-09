@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Add plan CLI command for multi-job quota simulation.
 - Add providers list CLI command.
 - Check provider references during config validation.
 - Add config validate CLI command.

@@ -95,6 +95,15 @@ interface InitOptions {
 declare function starterConfig(): string;
 declare function writeStarterConfig(options?: InitOptions): string;
 
+interface PlanResult {
+    decisions: PlanDecision[];
+}
+interface PlanDecision extends RoutingDecision {
+    remaining: number;
+}
+declare function planFreelane(config: FreelaneConfig, jobIds?: string[]): PlanResult;
+declare function formatPlan(plan: PlanResult, format: string): string;
+
 interface ProviderSummary {
     id: string;
     name: string;
@@ -132,4 +141,4 @@ interface ConfigValidationResult {
 declare function validateConfigFile(path?: string): ConfigValidationResult;
 declare function formatValidation(result: ConfigValidationResult, format: string): string;
 
-export { type Candidate, type DefaultsConfig, type FreelaneConfig, type JobConfig, type PaidPolicy, type ProviderConfig, type QuotaUnit, type RoutingDecision, type RunnerArch, type RunnerOption, type RunnerOs, displayUnit, doctorConfig, findConfigPath, formatDecision, formatDoctor, formatProviderList, formatValidation, getRunnerOption, listProviders, loadConfig, providerFactories, quotaFor, resolveFreelane, roundQuota, starterConfig, validateConfigFile, writeStarterConfig };
+export { type Candidate, type DefaultsConfig, type FreelaneConfig, type JobConfig, type PaidPolicy, type ProviderConfig, type QuotaUnit, type RoutingDecision, type RunnerArch, type RunnerOption, type RunnerOs, displayUnit, doctorConfig, findConfigPath, formatDecision, formatDoctor, formatPlan, formatProviderList, formatValidation, getRunnerOption, listProviders, loadConfig, planFreelane, providerFactories, quotaFor, resolveFreelane, roundQuota, starterConfig, validateConfigFile, writeStarterConfig };

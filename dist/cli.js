@@ -359,56 +359,6 @@ function writeStarterConfig(options = {}) {
   return output;
 }
 
-// src/provider-list.ts
-var providers = [
-  {
-    id: "github",
-    name: "GitHub",
-    adapter: "hosted runner labels",
-    quota: "minutes or unlimited",
-    notes: "default fallback"
-  },
-  {
-    id: "blacksmith",
-    name: "Blacksmith",
-    adapter: "GitHub-compatible runner labels",
-    quota: "minutes or usd",
-    notes: "linux, windows, macos"
-  },
-  {
-    id: "ubicloud",
-    name: "Ubicloud",
-    adapter: "GitHub-compatible runner labels",
-    quota: "usd",
-    notes: "linux"
-  },
-  {
-    id: "warpbuild",
-    name: "WarpBuild",
-    adapter: "GitHub-compatible runner labels",
-    quota: "usd",
-    notes: "linux, windows, macos"
-  },
-  {
-    id: "namespace",
-    name: "Namespace",
-    adapter: "GitHub-compatible runner labels",
-    quota: "unit minutes",
-    notes: "supports profiles"
-  }
-];
-function listProviders() {
-  return providers.map((provider) => ({ ...provider }));
-}
-function formatProviderList(items, format) {
-  if (format === "json") return `${JSON.stringify({ providers: items }, null, 2)}
-`;
-  return [
-    "id	name	quota	notes",
-    ...items.map((provider) => `${provider.id}	${provider.name}	${provider.quota}	${provider.notes}`)
-  ].join("\n") + "\n";
-}
-
 // src/resolve.ts
 function resolveFreelane(config, jobId) {
   const job = config.jobs[jobId];
@@ -479,6 +429,112 @@ function directDecision(jobId, job) {
     quotaBurn: 0,
     available: Number.POSITIVE_INFINITY
   };
+}
+
+// src/plan.ts
+function planFreelane(config, jobIds = Object.keys(config.jobs)) {
+  const working = copyConfig(config);
+  const decisions = jobIds.map((jobId) => {
+    const decision2 = resolveFreelane(working, jobId);
+    const planned = {
+      ...decision2,
+      remaining: remainingAfter(decision2.available, decision2.quotaBurn)
+    };
+    consumeQuota(working.providers[decision2.provider], decision2.quotaUnit, decision2.quotaBurn);
+    return planned;
+  });
+  return { decisions };
+}
+function formatPlan(plan, format) {
+  if (format === "json") return `${JSON.stringify(plan, null, 2)}
+`;
+  return [
+    "job	provider	runner	burn	remaining	reason",
+    ...plan.decisions.map((decision2) => [
+      decision2.job,
+      decision2.provider,
+      decision2.runsOnJson,
+      `${decision2.quotaBurn} ${displayUnit(decision2.quotaUnit)}`,
+      `${decision2.remaining} ${displayUnit(decision2.quotaUnit)}`,
+      decision2.reason
+    ].join("	"))
+  ].join("\n") + "\n";
+}
+function copyConfig(config) {
+  return {
+    ...config,
+    defaults: config.defaults ? { ...config.defaults } : void 0,
+    providers: Object.fromEntries(
+      Object.entries(config.providers).map(([id, provider]) => [id, { ...provider }])
+    ),
+    jobs: Object.fromEntries(
+      Object.entries(config.jobs).map(([id, job]) => [id, { ...job }])
+    )
+  };
+}
+function consumeQuota(provider, unit, burn) {
+  if (!provider || unit === "unlimited" || burn <= 0 || !Number.isFinite(burn)) return;
+  if (unit === "usd") {
+    provider.used_credit_usd = roundQuota((provider.used_credit_usd ?? 0) + burn);
+  } else if (unit === "unit_minutes") {
+    provider.used_unit_minutes = roundQuota((provider.used_unit_minutes ?? 0) + burn);
+  } else {
+    provider.used_minutes = roundQuota((provider.used_minutes ?? 0) + burn);
+  }
+}
+function remainingAfter(available, burn) {
+  if (!Number.isFinite(available)) return available;
+  return roundQuota(available - burn);
+}
+
+// src/provider-list.ts
+var providers = [
+  {
+    id: "github",
+    name: "GitHub",
+    adapter: "hosted runner labels",
+    quota: "minutes or unlimited",
+    notes: "default fallback"
+  },
+  {
+    id: "blacksmith",
+    name: "Blacksmith",
+    adapter: "GitHub-compatible runner labels",
+    quota: "minutes or usd",
+    notes: "linux, windows, macos"
+  },
+  {
+    id: "ubicloud",
+    name: "Ubicloud",
+    adapter: "GitHub-compatible runner labels",
+    quota: "usd",
+    notes: "linux"
+  },
+  {
+    id: "warpbuild",
+    name: "WarpBuild",
+    adapter: "GitHub-compatible runner labels",
+    quota: "usd",
+    notes: "linux, windows, macos"
+  },
+  {
+    id: "namespace",
+    name: "Namespace",
+    adapter: "GitHub-compatible runner labels",
+    quota: "unit minutes",
+    notes: "supports profiles"
+  }
+];
+function listProviders() {
+  return providers.map((provider) => ({ ...provider }));
+}
+function formatProviderList(items, format) {
+  if (format === "json") return `${JSON.stringify({ providers: items }, null, 2)}
+`;
+  return [
+    "id	name	quota	notes",
+    ...items.map((provider) => `${provider.id}	${provider.name}	${provider.quota}	${provider.notes}`)
+  ].join("\n") + "\n";
 }
 
 // src/schema.ts
@@ -744,6 +800,11 @@ function main() {
     process.stdout.write(formatDecision(decision2, args.format));
     return;
   }
+  if (args.command === "plan") {
+    const config = loadConfig(args.config);
+    process.stdout.write(formatPlan(planFreelane(config), args.format));
+    return;
+  }
   if (args.command === "providers" && args.subcommand === "doctor") {
     const config = loadConfig(args.config);
     process.stdout.write(formatDoctor(doctorConfig(config), args.format));
@@ -795,6 +856,7 @@ function usage(code) {
     "Usage:",
     "  freelane init [--output .freelane.yml] [--force]",
     "  freelane config validate [--config .freelane.yml] [--format text|json]",
+    "  freelane plan [--config .freelane.yml] [--format text|json]",
     "  freelane resolve --job <job> [--config .freelane.yml] [--format text|json|github-output]",
     "  freelane providers doctor [--config .freelane.yml] [--format text|json]",
     "  freelane providers list [--format text|json]"

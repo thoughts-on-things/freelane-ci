@@ -37,6 +37,12 @@ Check configured provider routing:
 node dist/cli.js providers doctor --config examples/freelane.yml
 ```
 
+Preview all job routing with quota burn carried forward:
+
+```bash
+node dist/cli.js plan --config examples/freelane.yml
+```
+
 ## Use In GitHub Actions
 
 Freelane must run before the job it routes because GitHub chooses a runner before
