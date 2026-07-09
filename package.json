@@ -1,6 +1,6 @@
 {
   "name": "freelane-ci",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Route GitHub Actions jobs across CI runner providers to use free credits first.",
   "license": "MIT",
   "private": false,
