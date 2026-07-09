@@ -17,7 +17,7 @@ jobs:
       provider: ${{ steps.route.outputs.provider }}
       reason: ${{ steps.route.outputs.reason }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.repository.default_branch }}
       - id: route
@@ -30,7 +30,7 @@ jobs:
     needs: runner
     runs-on: ${{ needs.runner.outputs.label }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Show Freelane route
         run: |
           echo "Provider: ${{ needs.runner.outputs.provider }}"
@@ -46,7 +46,7 @@ jobs:
   action-smoke:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - id: route
         uses: ./
         with:
