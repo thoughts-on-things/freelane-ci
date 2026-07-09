@@ -4,7 +4,6 @@ const common = {
   format: ["cjs"] as const,
   platform: "node" as const,
   target: "node20",
-  dts: true,
   clean: false
 };
 
