@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/thoughts-on-things/freelane-ci/compare/v0.2.1...v0.3.0) (2026-07-09)
+
+
+### Features
+
+* **cli:** generate github actions workflow ([da36523](https://github.com/thoughts-on-things/freelane-ci/commit/da365231a80d038d7bd3791fa2cdc4a3d317c629))
+
 ## [0.2.1](https://github.com/thoughts-on-things/freelane-ci/compare/v0.2.0...v0.2.1) (2026-07-09)
 
 
