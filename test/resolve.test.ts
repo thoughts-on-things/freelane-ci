@@ -95,6 +95,25 @@ describe("resolveFreelane", () => {
     expect(decision.quotaBurn).toBe(40);
   });
 
+  it("supports Namespace macOS labels", () => {
+    const config: FreelaneConfig = {
+      ...baseConfig,
+      jobs: {
+        test: {
+          os: "macos",
+          arch: "arm64",
+          min_vcpu: 6,
+          estimate_minutes: 10,
+          providers: ["namespace"]
+        }
+      }
+    };
+
+    const decision = resolveFreelane(config, "test");
+
+    expect(decision.runner).toBe("nscloud-macos-sequoia-arm64-6x14");
+  });
+
   it("honors job-level runner overrides", () => {
     const config: FreelaneConfig = {
       ...baseConfig,

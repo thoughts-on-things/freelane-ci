@@ -91,10 +91,11 @@ function namespaceRunner(provider: ProviderConfig, job: JobConfig): RunnerOption
   }
 
   const arch = job.arch === "arm64" ? "arm64" : "amd64";
-  const vcpu = nearestVcpu(job.min_vcpu, [2, 4, 8, 16, 32]);
-  const memory = vcpu * 2;
   const os = namespaceOs(job.os);
   if (!os) return undefined;
+  const sizes = job.os === "macos" ? [6, 12] : [2, 4, 8, 16, 32];
+  const vcpu = nearestVcpu(job.min_vcpu, sizes);
+  const memory = job.os === "macos" ? (vcpu === 12 ? 28 : 14) : vcpu * 2;
 
   return option("namespace", `nscloud-${os}-${arch}-${vcpu}x${memory}`, vcpu, undefined, job, quotaUnitForProvider(provider, "unit_minutes"));
 }

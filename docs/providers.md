@@ -1,6 +1,7 @@
 # Providers
 
 Freelane's first provider model is GitHub Actions compatible runner labels.
+Built-in labels were checked against public provider docs on 2026-07-08.
 
 List supported adapters:
 
@@ -17,6 +18,8 @@ Default labels:
 - `windows-latest`
 - `macos-latest`
 
+Source: [GitHub-hosted runners reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)
+
 ## Blacksmith
 
 Generated labels include:
@@ -25,6 +28,8 @@ Generated labels include:
 - `blacksmith-4vcpu-ubuntu-2404-arm`
 - `blacksmith-4vcpu-windows-2025`
 - `blacksmith-6vcpu-macos-15`
+
+Source: [Blacksmith instance types](https://docs.blacksmith.sh/blacksmith-runners/overview)
 
 ## Ubicloud
 
@@ -36,6 +41,8 @@ Generated labels include:
 
 Ubicloud is Linux-only in the current adapter.
 
+Source: [Ubicloud runner types](https://www.ubicloud.com/docs/github-actions-integration/runner-types)
+
 ## WarpBuild
 
 Generated labels include:
@@ -45,6 +52,8 @@ Generated labels include:
 - `warp-windows-latest-x64-4x`
 - `warp-macos-latest-arm64-6x`
 
+Source: [WarpBuild cloud runners](https://www.warpbuild.com/docs/ci/cloud-runners)
+
 ## Namespace
 
 Generated labels include:
@@ -52,7 +61,9 @@ Generated labels include:
 - `nscloud-ubuntu-24.04-amd64-4x8`
 - `nscloud-ubuntu-24.04-arm64-4x8`
 - `nscloud-windows-2022-amd64-4x8`
-- `nscloud-macos-sequoia-arm64-6x12`
+- `nscloud-macos-sequoia-arm64-6x14`
+
+Source: [Namespace runner configuration](https://namespace.so/docs/reference/github-actions/runner-configuration)
 
 You can also use a profile:
 

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Verify provider label docs and correct Namespace macOS labels.
 - Apply synced GitHub minute usage during routing.
 - Add GitHub Actions usage sync from workflow job history.
 - Add usage report CLI command for configured quota state.
