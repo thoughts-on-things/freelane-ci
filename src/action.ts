@@ -17,6 +17,7 @@ async function run(): Promise<void> {
   const decision = resolveFreelane(config, job);
 
   core.setOutput("runs_on", decision.runsOnJson);
+  core.setOutput("label", decision.label ?? "");
   core.setOutput("provider", decision.provider);
   core.setOutput("runner", JSON.stringify(decision.runner));
   core.setOutput("reason", decision.reason);

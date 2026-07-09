@@ -41,29 +41,33 @@ jobs:
     providers: [blacksmith, ubicloud, github]
 ```
 
-Use the router job output in `runs-on`:
+Use a router job to choose the runner:
 
 ```yaml
 jobs:
-  freelane:
+  runner:
     runs-on: ubuntu-latest
     outputs:
+      label: ${{ steps.route.outputs.label }}
       runs_on: ${{ steps.route.outputs.runs_on }}
     steps:
       - uses: actions/checkout@v4
       - id: route
-        uses: freelane-ci/freelane/action@v0
+        uses: thoughts-on-things/freelane-ci@v0
         with:
           job: test-linux
           validate: true
 
   test:
-    needs: freelane
-    runs-on: ${{ fromJSON(needs.freelane.outputs.runs_on) }}
+    needs: runner
+    runs-on: ${{ needs.runner.outputs.label }}
     steps:
       - uses: actions/checkout@v4
       - run: npm test
 ```
+
+Use `runs-on: ${{ fromJSON(needs.runner.outputs.runs_on) }}` when a job may
+resolve to an array-style runner.
 
 Try the CLI locally:
 

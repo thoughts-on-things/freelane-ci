@@ -41,7 +41,7 @@ describe("collectGitHubUsage", () => {
     };
 
     const usage = await collectGitHubUsage({
-      repo: "freelane-ci/freelane",
+      repo: "thoughts-on-things/freelane-ci",
       now: new Date("2026-07-08T12:00:00Z"),
       fetchImpl
     });

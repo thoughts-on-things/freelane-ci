@@ -66,6 +66,7 @@ export interface RoutingDecision {
   job: string;
   provider: string;
   runner: string | string[];
+  label?: string;
   runsOnJson: string;
   reason: string;
   paidRequired: boolean;

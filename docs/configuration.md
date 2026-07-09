@@ -3,7 +3,7 @@
 Freelane reads `.freelane.yml` by default.
 
 ```yaml
-$schema: https://raw.githubusercontent.com/freelane-ci/freelane/main/schemas/freelane.schema.json
+$schema: https://raw.githubusercontent.com/thoughts-on-things/freelane-ci/main/schemas/freelane.schema.json
 version: 1
 
 defaults:

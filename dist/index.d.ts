@@ -59,6 +59,7 @@ interface RoutingDecision {
     job: string;
     provider: string;
     runner: string | string[];
+    label?: string;
     runsOnJson: string;
     reason: string;
     paidRequired: boolean;
@@ -87,7 +88,7 @@ declare function formatDoctor(report: DoctorReport, format: string): string;
 declare function findConfigPath(cwd?: string): string;
 declare function loadConfig(path?: string): FreelaneConfig;
 
-declare const CONFIG_SCHEMA_URL = "https://raw.githubusercontent.com/freelane-ci/freelane/main/schemas/freelane.schema.json";
+declare const CONFIG_SCHEMA_URL = "https://raw.githubusercontent.com/thoughts-on-things/freelane-ci/main/schemas/freelane.schema.json";
 
 declare function formatDecision(decision: RoutingDecision, format: string): string;
 

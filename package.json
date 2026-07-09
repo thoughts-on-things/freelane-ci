@@ -37,12 +37,12 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/freelane-ci/freelane.git"
+    "url": "https://github.com/thoughts-on-things/freelane-ci.git"
   },
   "bugs": {
-    "url": "https://github.com/freelane-ci/freelane/issues"
+    "url": "https://github.com/thoughts-on-things/freelane-ci/issues"
   },
-  "homepage": "https://github.com/freelane-ci/freelane#readme",
+  "homepage": "https://github.com/thoughts-on-things/freelane-ci#readme",
   "dependencies": {
     "@actions/core": "^1.11.1",
     "ajv": "^8.20.0",

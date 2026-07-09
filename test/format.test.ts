@@ -6,6 +6,7 @@ const decision: RoutingDecision = {
   job: "test",
   provider: "github",
   runner: "ubuntu-latest",
+  label: "ubuntu-latest",
   runsOnJson: '"ubuntu-latest"',
   reason: "selected github",
   paidRequired: false,
@@ -17,6 +18,7 @@ const decision: RoutingDecision = {
 describe("formatDecision", () => {
   it("formats GitHub output lines", () => {
     expect(formatDecision(decision, "github-output")).toContain('runs_on="ubuntu-latest"');
+    expect(formatDecision(decision, "github-output")).toContain("label=ubuntu-latest");
     expect(formatDecision(decision, "github-output")).toContain("provider=github");
   });
 

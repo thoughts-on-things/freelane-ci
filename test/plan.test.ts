@@ -38,6 +38,7 @@ describe("planFreelane", () => {
           job: "test",
           provider: "github",
           runner: "ubuntu-latest",
+          label: "ubuntu-latest",
           runsOnJson: "\"ubuntu-latest\"",
           reason: "selected github within configured free quota",
           paidRequired: false,

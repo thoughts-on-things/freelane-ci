@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Add plain runner label output for simple GitHub workflows.
 - Dogfood the local GitHub Action in CI.
 - Add GitHub Actions usage sync workflow example.
 - Add tag-based release workflow.

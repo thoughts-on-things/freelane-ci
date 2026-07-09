@@ -34,4 +34,5 @@ jobs:
       - name: Check action outputs
         run: |
           test '${{ steps.route.outputs.provider }}' = 'blacksmith'
+          test '${{ steps.route.outputs.label }}' = 'blacksmith-2vcpu-ubuntu-2404'
           test '${{ steps.route.outputs.runs_on }}' = '"blacksmith-2vcpu-ubuntu-2404"'

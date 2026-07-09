@@ -66,6 +66,31 @@ node dist/cli.js plan --config examples/freelane.yml
 Freelane must run before the job it routes because GitHub chooses a runner before
 job steps execute.
 
+```yaml
+jobs:
+  runner:
+    runs-on: ubuntu-latest
+    outputs:
+      label: ${{ steps.route.outputs.label }}
+      runs_on: ${{ steps.route.outputs.runs_on }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: route
+        uses: thoughts-on-things/freelane-ci@v0
+        with:
+          job: test-linux
+
+  test:
+    needs: runner
+    runs-on: ${{ needs.runner.outputs.label }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm test
+```
+
+Use `runs-on: ${{ fromJSON(needs.runner.outputs.runs_on) }}` when a job may
+resolve to an array-style runner.
+
 See [examples/github-actions/freelane-routed.yml](../examples/github-actions/freelane-routed.yml).
 
 The action validates config by default. Set `validate: false` only when testing

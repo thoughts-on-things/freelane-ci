@@ -18,6 +18,8 @@ inputs:
 outputs:
   runs_on:
     description: JSON value for use with fromJSON(...).
+  label:
+    description: Plain runner label when the selected runner is a single string.
   provider:
     description: Selected provider id.
   runner:

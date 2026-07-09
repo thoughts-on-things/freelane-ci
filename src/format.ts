@@ -5,6 +5,7 @@ export function formatDecision(decision: RoutingDecision, format: string): strin
   if (format === "github-output") {
     return [
       `runs_on=${decision.runsOnJson}`,
+      `label=${decision.label ?? ""}`,
       `provider=${decision.provider}`,
       `runner=${JSON.stringify(decision.runner)}`,
       `reason=${decision.reason}`

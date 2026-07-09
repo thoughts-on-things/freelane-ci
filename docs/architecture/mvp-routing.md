@@ -12,25 +12,27 @@ jobs:
 
 ```yaml
 jobs:
-  freelane:
+  runner:
     runs-on: ubuntu-latest
     outputs:
+      label: ${{ steps.route.outputs.label }}
       runs_on: ${{ steps.route.outputs.runs_on }}
     steps:
       - id: route
-        uses: freelane-ci/freelane/action@v0
+        uses: thoughts-on-things/freelane-ci@v0
         with:
           job: test-linux
 
   test:
-    needs: freelane
-    runs-on: ${{ fromJSON(needs.freelane.outputs.runs_on) }}
+    needs: runner
+    runs-on: ${{ needs.runner.outputs.label }}
     steps:
       - uses: actions/checkout@v4
       - run: npm test
 ```
 
-`runs_on` is JSON so providers can return either:
+`label` is easiest when providers return one runner label. `runs_on` is JSON so
+providers can also return:
 
 ```json
 "ubuntu-latest"
@@ -51,7 +53,7 @@ Thin GitHub Action entrypoint that:
 - reads `.freelane.yml`
 - resolves the requested job key
 - prints a human-readable decision summary
-- sets outputs for `runs_on`, `provider`, `reason`, and `alerts`
+- sets outputs for `runs_on`, `label`, `provider`, `runner`, and `reason`
 
 ### CLI Core
 

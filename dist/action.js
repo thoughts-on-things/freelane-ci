@@ -291,6 +291,7 @@ function decision(jobId, candidate, reason) {
     job: jobId,
     provider: candidate.option.provider,
     runner,
+    label: typeof runner === "string" ? runner : void 0,
     runsOnJson: JSON.stringify(runner),
     reason,
     paidRequired: candidate.paidRequired,
@@ -305,6 +306,7 @@ function directDecision(jobId, job) {
     job: jobId,
     provider: "manual",
     runner,
+    label: typeof runner === "string" ? runner : void 0,
     runsOnJson: JSON.stringify(runner),
     reason: "selected job-specific runner",
     paidRequired: false,
@@ -579,6 +581,7 @@ async function run() {
   const config = loadConfig(configPath);
   const decision2 = resolveFreelane(config, job);
   core.setOutput("runs_on", decision2.runsOnJson);
+  core.setOutput("label", decision2.label ?? "");
   core.setOutput("provider", decision2.provider);
   core.setOutput("runner", JSON.stringify(decision2.runner));
   core.setOutput("reason", decision2.reason);

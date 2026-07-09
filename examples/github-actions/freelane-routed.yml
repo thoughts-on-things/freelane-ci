@@ -7,16 +7,17 @@ on:
       - main
 
 jobs:
-  freelane:
+  runner:
     runs-on: ubuntu-latest
     outputs:
+      label: ${{ steps.route.outputs.label }}
       runs_on: ${{ steps.route.outputs.runs_on }}
       provider: ${{ steps.route.outputs.provider }}
       reason: ${{ steps.route.outputs.reason }}
     steps:
       - uses: actions/checkout@v4
       - id: route
-        uses: freelane-ci/freelane/action@v0
+        uses: thoughts-on-things/freelane-ci@v0
         with:
           config: examples/freelane.yml
           job: test-linux
@@ -24,12 +25,12 @@ jobs:
 
   test:
     needs:
-      - freelane
-    runs-on: ${{ fromJSON(needs.freelane.outputs.runs_on) }}
+      - runner
+    runs-on: ${{ needs.runner.outputs.label }}
     steps:
       - uses: actions/checkout@v4
       - name: Show routing decision
         run: |
-          echo "Provider: ${{ needs.freelane.outputs.provider }}"
-          echo "Reason: ${{ needs.freelane.outputs.reason }}"
+          echo "Provider: ${{ needs.runner.outputs.provider }}"
+          echo "Reason: ${{ needs.runner.outputs.reason }}"
       - run: npm test

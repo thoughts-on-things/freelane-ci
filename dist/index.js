@@ -336,7 +336,7 @@ function isRecord(value) {
 }
 
 // src/constants.ts
-var CONFIG_SCHEMA_URL = "https://raw.githubusercontent.com/freelane-ci/freelane/main/schemas/freelane.schema.json";
+var CONFIG_SCHEMA_URL = "https://raw.githubusercontent.com/thoughts-on-things/freelane-ci/main/schemas/freelane.schema.json";
 
 // src/format.ts
 function formatDecision(decision2, format) {
@@ -345,6 +345,7 @@ function formatDecision(decision2, format) {
   if (format === "github-output") {
     return [
       `runs_on=${decision2.runsOnJson}`,
+      `label=${decision2.label ?? ""}`,
       `provider=${decision2.provider}`,
       `runner=${JSON.stringify(decision2.runner)}`,
       `reason=${decision2.reason}`
@@ -604,6 +605,7 @@ function decision(jobId, candidate, reason) {
     job: jobId,
     provider: candidate.option.provider,
     runner,
+    label: typeof runner === "string" ? runner : void 0,
     runsOnJson: JSON.stringify(runner),
     reason,
     paidRequired: candidate.paidRequired,
@@ -618,6 +620,7 @@ function directDecision(jobId, job) {
     job: jobId,
     provider: "manual",
     runner,
+    label: typeof runner === "string" ? runner : void 0,
     runsOnJson: JSON.stringify(runner),
     reason: "selected job-specific runner",
     paidRequired: false,
