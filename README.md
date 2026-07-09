@@ -119,8 +119,6 @@ are later adapters because they require remote pipeline orchestration.
 - [Security model](docs/security-model.md)
 - [Roadmap](docs/roadmap.md)
 - [Releasing](docs/releasing.md)
-- [Research](docs/research/2026-07-08-ci-provider-landscape.md)
-- [Architecture](docs/architecture/mvp-routing.md)
 
 ## Development
 

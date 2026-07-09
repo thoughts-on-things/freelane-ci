@@ -1,7 +1,7 @@
 # Providers
 
 Freelane's first provider model is GitHub Actions compatible runner labels.
-Built-in labels were checked against public provider docs on 2026-07-08.
+Built-in labels follow each provider's public runner documentation.
 
 List supported adapters:
 
