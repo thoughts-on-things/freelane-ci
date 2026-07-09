@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Bundle GitHub Action runtime dependencies.
 - Dogfood Freelane `@main` in CI.
 - Add release-please npm publishing workflow.
 - Document CLI installation paths.
