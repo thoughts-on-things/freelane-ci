@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.1](https://github.com/thoughts-on-things/freelane-ci/compare/v0.2.0...v0.2.1) (2026-07-09)
+
+
+### Bug Fixes
+
+* **action:** run action on node 24 ([e244bec](https://github.com/thoughts-on-things/freelane-ci/commit/e244becf38d4ae65bbdc2be254f16e1eac4cca49))
+
+
+### Documentation
+
+* clarify npm trusted publisher setup ([4a3516e](https://github.com/thoughts-on-things/freelane-ci/commit/4a3516ef8a189baeb982a059a853efb575ad655e))
+
 ## [0.2.0](https://github.com/thoughts-on-things/freelane-ci/compare/v0.1.0...v0.2.0) (2026-07-09)
 
 
