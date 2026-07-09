@@ -2,6 +2,7 @@
 import { loadConfig } from "./config";
 import { doctorConfig, formatDoctor } from "./doctor";
 import { formatDecision } from "./format";
+import { writeGitHubActionsWorkflow } from "./github-actions";
 import { collectGitHubUsage, formatGitHubUsageState, writeGitHubUsageState } from "./github-usage";
 import { writeStarterConfig } from "./init";
 import { formatPlan, planFreelane } from "./plan";
@@ -24,6 +25,7 @@ interface Args {
   token?: string;
   usageState?: string;
   noUsageState?: boolean;
+  uses?: string;
   format: "text" | "json" | "github-output";
 }
 
@@ -82,6 +84,18 @@ async function main(): Promise<void> {
     return;
   }
 
+  if (args.command === "init" && args.subcommand === "github-actions") {
+    const config = loadConfig(args.config);
+    const output = writeGitHubActionsWorkflow(config, {
+      configPath: args.config ?? ".freelane.yml",
+      force: args.force,
+      output: args.output,
+      uses: args.uses
+    });
+    process.stdout.write(`created ${output}\n`);
+    return;
+  }
+
   if (args.command === "init") {
     const output = writeStarterConfig({ output: args.output, force: args.force });
     process.stdout.write(`created ${output}\n`);
@@ -95,6 +109,9 @@ function parseArgs(argv: string[]): Args {
   const args: Args = { command: argv[0], format: "text" };
   let start = 1;
   if (args.command === "providers" || args.command === "config" || args.command === "usage") {
+    args.subcommand = argv[1];
+    start = 2;
+  } else if (args.command === "init" && argv[1] === "github-actions") {
     args.subcommand = argv[1];
     start = 2;
   }
@@ -112,6 +129,7 @@ function parseArgs(argv: string[]): Args {
     else if (value === "--token") args.token = argv[++i];
     else if (value === "--usage-state") args.usageState = argv[++i];
     else if (value === "--no-usage-state") args.noUsageState = true;
+    else if (value === "--uses") args.uses = argv[++i];
     else if (value === "--format") args.format = parseFormat(argv[++i]);
     else throw new Error(`unknown argument: ${value}`);
   }
@@ -141,6 +159,7 @@ function usage(code: number): never {
   process.stdout.write([
     "Usage:",
     "  freelane init [--output .freelane.yml] [--force]",
+    "  freelane init github-actions [--config .freelane.yml] [--output .github/workflows/freelane-ci.yml] [--uses thoughts-on-things/freelane-ci@v0] [--force]",
     "  freelane config validate [--config .freelane.yml] [--format text|json]",
     "  freelane plan [--config .freelane.yml] [--usage-state .freelane-usage.json] [--format text|json]",
     "  freelane resolve --job <job> [--config .freelane.yml] [--usage-state .freelane-usage.json] [--format text|json|github-output]",

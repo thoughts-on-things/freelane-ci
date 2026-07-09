@@ -7,16 +7,22 @@ on:
       - main
 
 jobs:
-  runner:
+  freelane:
+    name: Choose runners
     runs-on: ubuntu-latest
     outputs:
-      label: ${{ steps.route.outputs.label }}
-      runs_on: ${{ steps.route.outputs.runs_on }}
-      provider: ${{ steps.route.outputs.provider }}
-      reason: ${{ steps.route.outputs.reason }}
+      test_linux: ${{ steps.test_linux.outputs.label }}
+      test_linux_runs_on: ${{ steps.test_linux.outputs.runs_on }}
+      test_linux_provider: ${{ steps.test_linux.outputs.provider }}
+      test_linux_reason: ${{ steps.test_linux.outputs.reason }}
     steps:
-      - uses: actions/checkout@v4
-      - id: route
+      - uses: actions/checkout@v7
+      - name: Check config
+        run: npx --yes freelane-ci@latest config validate --config examples/freelane.yml
+      - name: Preview routing
+        run: npx --yes freelane-ci@latest plan --config examples/freelane.yml
+      - id: test_linux
+        name: Route test-linux
         uses: thoughts-on-things/freelane-ci@v0
         with:
           config: examples/freelane.yml
@@ -25,12 +31,8 @@ jobs:
 
   test:
     needs:
-      - runner
-    runs-on: ${{ needs.runner.outputs.label }}
+      - freelane
+    runs-on: ${{ needs.freelane.outputs.test_linux }}
     steps:
-      - uses: actions/checkout@v4
-      - name: Show routing decision
-        run: |
-          echo "Provider: ${{ needs.runner.outputs.provider }}"
-          echo "Reason: ${{ needs.runner.outputs.reason }}"
+      - uses: actions/checkout@v7
       - run: npm test

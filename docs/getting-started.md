@@ -1,97 +1,97 @@
 # Getting Started
 
-## Install
+## Create A Config
 
 ```bash
-npm install
-npm run build
+npx freelane-ci@latest init
 ```
 
-## Resolve A Job Locally
+Edit `.freelane.yml` to enable the providers you use and define the jobs you
+want Freelane to route.
 
-Create a starter config:
+Validate it:
 
 ```bash
-node dist/cli.js init --output .freelane.yml
+npx freelane-ci@latest config validate
 ```
 
-```bash
-node dist/cli.js resolve --config examples/freelane.yml --job test-linux
-```
-
-JSON output:
+## Preview Routing
 
 ```bash
-node dist/cli.js resolve --config examples/freelane.yml --job test-linux --format json
-```
-
-GitHub output format:
-
-```bash
-node dist/cli.js resolve --config examples/freelane.yml --job test-linux --format github-output
+npx freelane-ci@latest plan
 ```
 
 Check configured provider routing:
 
 ```bash
-node dist/cli.js providers doctor --config examples/freelane.yml
+npx freelane-ci@latest providers doctor
 ```
 
-Report configured quota state:
+Resolve one job when debugging:
 
 ```bash
-node dist/cli.js usage report --config examples/freelane.yml
-```
-
-Sync recent GitHub Actions history into local state:
-
-```bash
-GITHUB_TOKEN=... node dist/cli.js usage sync-github --repo owner/repo
+npx freelane-ci@latest resolve --job test-linux --format json
 ```
 
 Routing commands automatically read `.freelane-usage.json` when it exists. Use
 `--no-usage-state` to ignore it.
 
-In GitHub Actions, grant the job `actions: read` and pass `${{ github.token }}`.
-See [examples/github-actions/freelane-usage-sync.yml](../examples/github-actions/freelane-usage-sync.yml).
-
-Preview all job routing with quota burn carried forward:
+## Generate A Workflow
 
 ```bash
-node dist/cli.js plan --config examples/freelane.yml
+npx freelane-ci@latest init github-actions
 ```
 
-## Use In GitHub Actions
-
 Freelane must run before the job it routes because GitHub chooses a runner before
-job steps execute.
+job steps execute. The generated workflow creates a `freelane` router job and one
+starter job per entry in `.freelane.yml`.
 
 ```yaml
 jobs:
-  runner:
+  freelane:
     runs-on: ubuntu-latest
     outputs:
-      label: ${{ steps.route.outputs.label }}
-      runs_on: ${{ steps.route.outputs.runs_on }}
+      test_linux: ${{ steps.test_linux.outputs.label }}
+      test_linux_runs_on: ${{ steps.test_linux.outputs.runs_on }}
     steps:
-      - uses: actions/checkout@v4
-      - id: route
+      - uses: actions/checkout@v7
+      - id: test_linux
         uses: thoughts-on-things/freelane-ci@v0
         with:
           job: test-linux
 
   test:
-    needs: runner
-    runs-on: ${{ needs.runner.outputs.label }}
+    needs: freelane
+    runs-on: ${{ needs.freelane.outputs.test_linux }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: npm test
 ```
 
-Use `runs-on: ${{ fromJSON(needs.runner.outputs.runs_on) }}` when a job may
-resolve to an array-style runner.
+Use `runs-on: ${{ fromJSON(needs.freelane.outputs.test_linux_runs_on) }}` only
+when a job may resolve to an array-style runner.
+
+The action logs the selected job, provider, runner, quota burn, remaining quota,
+and reason. It also writes the same route decision to the GitHub job summary.
 
 See [examples/github-actions/freelane-routed.yml](../examples/github-actions/freelane-routed.yml).
+
+## Usage State
+
+Report configured quota state:
+
+```bash
+npx freelane-ci@latest usage report
+```
+
+Sync recent GitHub Actions history into local state:
+
+```bash
+GITHUB_TOKEN=... npx freelane-ci@latest usage sync-github --repo owner/repo
+```
+
+In GitHub Actions, grant the job `actions: read` and pass `${{ github.token }}`.
+See [examples/github-actions/freelane-usage-sync.yml](../examples/github-actions/freelane-usage-sync.yml).
 
 The action validates config by default. Set `validate: false` only when testing
 future config fields locally.

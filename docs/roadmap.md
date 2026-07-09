@@ -11,6 +11,7 @@
 
 - GitHub usage collection from workflow job history
 - Provider status checks
+- CLI-generated GitHub Actions workflows
 - Better queue-risk scoring
 - Config schema docs and examples
 

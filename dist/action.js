@@ -33222,6 +33222,9 @@ function issueCommand(command, properties, message) {
   const cmd = new Command(command, properties, message);
   process.stdout.write(cmd.toString() + os.EOL);
 }
+function issue(name, message = "") {
+  issueCommand(name, {}, message);
+}
 var CMD_STRING = "::";
 var Command = class {
   constructor(command, properties, message) {
@@ -33694,6 +33697,15 @@ function error(message, properties = {}) {
 function warning(message, properties = {}) {
   issueCommand("warning", toCommandProperties(properties), message instanceof Error ? message.toString() : message);
 }
+function info(message) {
+  process.stdout.write(message + os4.EOL);
+}
+function startGroup(name) {
+  issue("group", name);
+}
+function endGroup() {
+  issue("endgroup");
+}
 
 // src/config.ts
 var import_node_fs = require("fs");
@@ -33775,6 +33787,12 @@ function quotaUnitForProvider(provider, fallback = "unlimited") {
   if (provider.free_minutes_per_month !== void 0) return "minutes";
   if (provider.unit_minutes_per_month !== void 0) return "unit_minutes";
   return fallback;
+}
+function displayUnit(unit) {
+  if (unit === "usd") return "usd";
+  if (unit === "unit_minutes") return "unit-min";
+  if (unit === "minutes") return "min";
+  return "unlimited";
 }
 function roundQuota(value) {
   if (!Number.isFinite(value)) return value;
@@ -34255,16 +34273,34 @@ async function run() {
   setOutput("provider", decision2.provider);
   setOutput("runner", JSON.stringify(decision2.runner));
   setOutput("reason", decision2.reason);
+  logDecision(decision2);
   if (config.defaults?.alerts?.github_warning && decision2.paidRequired) {
     warning(`Freelane selected ${decision2.provider} outside configured free quota.`);
   }
   if (config.defaults?.alerts?.github_summary !== false) {
     await summary.addHeading("Freelane CI").addTable([
+      [{ data: "Job", header: true }, decision2.job],
       [{ data: "Provider", header: true }, decision2.provider],
       [{ data: "Runner", header: true }, decision2.runsOnJson],
+      [{ data: "Burn", header: true }, formatQuota(decision2.quotaBurn, decision2.quotaUnit)],
+      [{ data: "Available", header: true }, formatQuota(decision2.available, decision2.quotaUnit)],
       [{ data: "Reason", header: true }, decision2.reason]
     ]).write();
   }
+}
+function logDecision(decision2) {
+  startGroup("Freelane route");
+  info(`Job: ${decision2.job}`);
+  info(`Provider: ${decision2.provider}`);
+  info(`Runner: ${decision2.runsOnJson}`);
+  info(`Burn: ${formatQuota(decision2.quotaBurn, decision2.quotaUnit)}`);
+  info(`Available: ${formatQuota(decision2.available, decision2.quotaUnit)}`);
+  info(`Reason: ${decision2.reason}`);
+  endGroup();
+}
+function formatQuota(value, unit) {
+  if (unit === "unlimited") return "unlimited";
+  return `${roundQuota(value)} ${displayUnit(unit)}`;
 }
 run().catch((error2) => {
   setFailed(error2 instanceof Error ? error2.message : String(error2));

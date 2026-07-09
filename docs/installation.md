@@ -1,30 +1,44 @@
 # Installation
 
-## Global CLI
-
-```bash
-npm install -g freelane-ci
-freelane init
-freelane providers list
-```
-
 ## One-Off CLI
 
+No install is required for normal setup:
+
 ```bash
-npx freelane-ci providers list
-npx freelane-ci init --output .freelane.yml
+npx freelane-ci@latest init
+npx freelane-ci@latest init github-actions
+npx freelane-ci@latest providers list
 ```
 
-## Project Dev Install
+## Project Dev Dependency
+
+Install Freelane when you want a pinned CLI in your repo:
 
 ```bash
 npm install --save-dev freelane-ci
 npx freelane init --output .freelane.yml
+npx freelane init github-actions
+```
+
+## Global CLI
+
+Global installs are optional:
+
+```bash
+npm install -g freelane-ci
+freelane init
+freelane init github-actions
 ```
 
 ## GitHub Action
 
-Pin a release for normal use:
+Prefer generating the workflow from the CLI:
+
+```bash
+npx freelane-ci@latest init github-actions
+```
+
+Pin a release when writing the action step by hand:
 
 ```yaml
 - uses: thoughts-on-things/freelane-ci@v0

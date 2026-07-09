@@ -17,13 +17,13 @@ Namespace, and other services. Freelane gives teams one small routing layer:
 
 ## Quick Start
 
-Install the CLI:
+Create a config:
 
 ```bash
-npm install -g freelane-ci
+npx freelane-ci@latest init
 ```
 
-Create `.freelane.yml`:
+Edit `.freelane.yml`:
 
 ```yaml
 version: 1
@@ -47,47 +47,52 @@ jobs:
     providers: [blacksmith, ubicloud, github]
 ```
 
-Use a router job to choose the runner:
+Preview the route and generate a starter workflow:
+
+```bash
+npx freelane-ci@latest config validate
+npx freelane-ci@latest plan
+npx freelane-ci@latest init github-actions
+```
+
+The generated workflow creates one `freelane` router job and friendly outputs for
+each configured job:
 
 ```yaml
 jobs:
-  runner:
+  freelane:
     runs-on: ubuntu-latest
     outputs:
-      label: ${{ steps.route.outputs.label }}
-      runs_on: ${{ steps.route.outputs.runs_on }}
+      test_linux: ${{ steps.test_linux.outputs.label }}
+      test_linux_runs_on: ${{ steps.test_linux.outputs.runs_on }}
     steps:
-      - uses: actions/checkout@v4
-      - id: route
+      - uses: actions/checkout@v7
+      - id: test_linux
         uses: thoughts-on-things/freelane-ci@v0
         with:
           job: test-linux
-          validate: true
 
   test:
-    needs: runner
-    runs-on: ${{ needs.runner.outputs.label }}
+    needs: freelane
+    runs-on: ${{ needs.freelane.outputs.test_linux }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: npm test
 ```
 
-Use `runs-on: ${{ fromJSON(needs.runner.outputs.runs_on) }}` when a job may
-resolve to an array-style runner.
+Use `runs-on: ${{ fromJSON(needs.freelane.outputs.test_linux_runs_on) }}` only
+when a job may resolve to an array-style runner.
 
 Try the CLI locally:
 
 ```bash
-npm install
-npm run build
-node dist/cli.js init --output .freelane.yml
-node dist/cli.js providers list
-node dist/cli.js config validate --config examples/freelane.yml
-node dist/cli.js usage report --config examples/freelane.yml
-node dist/cli.js usage sync-github --repo owner/repo
-node dist/cli.js plan --config examples/freelane.yml
-node dist/cli.js resolve --config examples/freelane.yml --job test-linux --format json
-node dist/cli.js providers doctor --config examples/freelane.yml
+npx freelane-ci@latest providers list
+npx freelane-ci@latest config validate --config examples/freelane.yml
+npx freelane-ci@latest usage report --config examples/freelane.yml
+npx freelane-ci@latest usage sync-github --repo owner/repo
+npx freelane-ci@latest plan --config examples/freelane.yml
+npx freelane-ci@latest resolve --config examples/freelane.yml --job test-linux --format json
+npx freelane-ci@latest providers doctor --config examples/freelane.yml
 ```
 
 For scheduled usage sync in GitHub Actions, see
@@ -108,6 +113,7 @@ are later adapters because they require remote pipeline orchestration.
 
 - [Installation](docs/installation.md)
 - [Getting started](docs/getting-started.md)
+- [CLI](docs/cli.md)
 - [Configuration](docs/configuration.md)
 - [Providers](docs/providers.md)
 - [Security model](docs/security-model.md)

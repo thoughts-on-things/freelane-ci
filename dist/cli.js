@@ -312,9 +312,116 @@ function formatDecision(decision2, format) {
 `;
 }
 
-// src/github-usage.ts
+// src/github-actions.ts
 var import_node_fs2 = require("fs");
 var import_node_path2 = require("path");
+var DEFAULT_WORKFLOW_OUTPUT = ".github/workflows/freelane-ci.yml";
+var DEFAULT_ACTION_REF = "thoughts-on-things/freelane-ci@v0";
+function githubActionsAliases(config) {
+  const seen = /* @__PURE__ */ new Map();
+  return Object.keys(config.jobs).map((job) => {
+    const base = sanitizeOutputName(job);
+    const count = seen.get(base) ?? 0;
+    seen.set(base, count + 1);
+    return {
+      job,
+      alias: count === 0 ? base : `${base}_${count + 1}`
+    };
+  });
+}
+function generateGitHubActionsWorkflow(config, options = {}) {
+  const aliases = githubActionsAliases(config);
+  const configPath = options.configPath ?? ".freelane.yml";
+  const uses = options.uses ?? DEFAULT_ACTION_REF;
+  const workflowName = options.workflowName ?? "Freelane CI";
+  const lines = [
+    `name: ${yamlString(workflowName)}`,
+    "",
+    "on:",
+    "  pull_request:",
+    "  push:",
+    "    branches:",
+    "      - main",
+    "",
+    "permissions:",
+    "  contents: read",
+    "",
+    "jobs:",
+    "  freelane:",
+    "    name: Choose runners",
+    "    runs-on: ubuntu-latest",
+    "    outputs:"
+  ];
+  for (const alias of aliases) {
+    lines.push(
+      `      ${alias.alias}: \${{ steps.${alias.alias}.outputs.label }}`,
+      `      ${alias.alias}_runs_on: \${{ steps.${alias.alias}.outputs.runs_on }}`,
+      `      ${alias.alias}_provider: \${{ steps.${alias.alias}.outputs.provider }}`,
+      `      ${alias.alias}_reason: \${{ steps.${alias.alias}.outputs.reason }}`
+    );
+  }
+  lines.push(
+    "    steps:",
+    "      - uses: actions/checkout@v7",
+    `      - name: Check ${yamlString(configPath)}`,
+    `        run: npx --yes freelane-ci@latest config validate --config ${shellArg(configPath)}`,
+    "      - name: Preview routing",
+    `        run: npx --yes freelane-ci@latest plan --config ${shellArg(configPath)}`
+  );
+  for (const alias of aliases) {
+    lines.push(
+      `      - id: ${alias.alias}`,
+      `        name: Route ${yamlString(alias.job)}`,
+      `        uses: ${yamlString(uses)}`,
+      "        with:",
+      `          config: ${yamlString(configPath)}`,
+      `          job: ${yamlString(alias.job)}`,
+      "          validate: true"
+    );
+  }
+  for (const alias of aliases) {
+    lines.push(
+      "",
+      `  ${alias.alias}:`,
+      `    name: ${yamlString(alias.job)}`,
+      "    needs: freelane",
+      `    runs-on: \${{ needs.freelane.outputs.${alias.alias} }}`,
+      "    steps:",
+      "      - uses: actions/checkout@v7",
+      `      - run: echo "Replace this with the ${shellSafe(alias.job)} CI command"`
+    );
+  }
+  return lines.join("\n") + "\n";
+}
+function writeGitHubActionsWorkflow(config, options = {}) {
+  const output = (0, import_node_path2.resolve)(options.cwd ?? process.cwd(), options.output ?? DEFAULT_WORKFLOW_OUTPUT);
+  if ((0, import_node_fs2.existsSync)(output) && !options.force) {
+    throw new Error(`${output} already exists; pass --force to overwrite`);
+  }
+  (0, import_node_fs2.mkdirSync)((0, import_node_path2.dirname)(output), { recursive: true });
+  (0, import_node_fs2.writeFileSync)(output, generateGitHubActionsWorkflow(config, options), "utf8");
+  return output;
+}
+function sanitizeOutputName(value) {
+  const sanitized = value.toLowerCase().replace(/[^a-z0-9_]+/g, "_").replace(/^_+|_+$/g, "").replace(/_+/g, "_");
+  const fallback = sanitized || "job";
+  return /^[0-9]/.test(fallback) ? `job_${fallback}` : fallback;
+}
+function yamlString(value) {
+  if (/^[A-Za-z0-9_./@ -]+$/.test(value)) return value;
+  return JSON.stringify(value);
+}
+function shellSafe(value) {
+  return value.replace(/["`$\\]/g, "");
+}
+function shellArg(value) {
+  if (/^[A-Za-z0-9_./@-]+$/.test(value)) return value;
+  return `'${value.replace(/'/g, "'\\''")}'`;
+}
+
+// src/github-usage.ts
+var import_node_fs3 = require("fs");
+var import_node_path3 = require("path");
 var DEFAULT_DAYS = 30;
 var DEFAULT_LIMIT = 50;
 async function collectGitHubUsage(options) {
@@ -348,8 +455,8 @@ async function collectGitHubUsage(options) {
   };
 }
 function writeGitHubUsageState(state, output = ".freelane-usage.json") {
-  const path = (0, import_node_path2.resolve)(output);
-  (0, import_node_fs2.writeFileSync)(path, `${JSON.stringify(state, null, 2)}
+  const path = (0, import_node_path3.resolve)(output);
+  (0, import_node_fs3.writeFileSync)(path, `${JSON.stringify(state, null, 2)}
 `, "utf8");
   return path;
 }
@@ -465,8 +572,8 @@ function isGitHubHostedLabel(label) {
 }
 
 // src/init.ts
-var import_node_fs3 = require("fs");
-var import_node_path3 = require("path");
+var import_node_fs4 = require("fs");
+var import_node_path4 = require("path");
 
 // src/constants.ts
 var CONFIG_SCHEMA_URL = "https://raw.githubusercontent.com/thoughts-on-things/freelane-ci/main/schemas/freelane.schema.json";
@@ -510,11 +617,11 @@ function starterConfig() {
   ].join("\n");
 }
 function writeStarterConfig(options = {}) {
-  const output = (0, import_node_path3.resolve)(options.cwd ?? process.cwd(), options.output ?? ".freelane.yml");
-  if ((0, import_node_fs3.existsSync)(output) && !options.force) {
+  const output = (0, import_node_path4.resolve)(options.cwd ?? process.cwd(), options.output ?? ".freelane.yml");
+  if ((0, import_node_fs4.existsSync)(output) && !options.force) {
     throw new Error(`${output} already exists; pass --force to overwrite`);
   }
-  (0, import_node_fs3.writeFileSync)(output, starterConfig(), "utf8");
+  (0, import_node_fs4.writeFileSync)(output, starterConfig(), "utf8");
   return output;
 }
 
@@ -705,7 +812,7 @@ function formatProviderList(items, format) {
 
 // src/schema.ts
 var import__ = __toESM(require("ajv/dist/2020"));
-var import_node_fs4 = require("fs");
+var import_node_fs5 = require("fs");
 var import_yaml2 = require("yaml");
 
 // schemas/freelane.schema.json
@@ -886,7 +993,7 @@ var freelane_schema_default = {
 
 // src/schema.ts
 function validateConfigFile(path = findConfigPath()) {
-  const config = (0, import_yaml2.parse)((0, import_node_fs4.readFileSync)(path, "utf8"));
+  const config = (0, import_yaml2.parse)((0, import_node_fs5.readFileSync)(path, "utf8"));
   const ajv = new import__.default({ allErrors: true });
   const validate = ajv.compile(freelane_schema_default);
   const schemaValid = validate(config);
@@ -1000,11 +1107,11 @@ function formatAmount2(value, unit) {
 }
 
 // src/usage-state.ts
-var import_node_fs5 = require("fs");
-var import_node_path4 = require("path");
+var import_node_fs6 = require("fs");
+var import_node_path5 = require("path");
 var DEFAULT_USAGE_STATE = ".freelane-usage.json";
 function loadUsageState(path = DEFAULT_USAGE_STATE) {
-  const parsed = JSON.parse((0, import_node_fs5.readFileSync)(path, "utf8"));
+  const parsed = JSON.parse((0, import_node_fs6.readFileSync)(path, "utf8"));
   if (parsed.source !== "github-actions" || !parsed.providers) {
     throw new Error(`${path}: unsupported usage state`);
   }
@@ -1021,8 +1128,8 @@ function applyUsageState(config, state) {
 }
 function applyUsageStateIfPresent(config, options = {}) {
   if (options.disabled) return config;
-  const path = (0, import_node_path4.resolve)(options.path ?? DEFAULT_USAGE_STATE);
-  if (!options.path && !(0, import_node_fs5.existsSync)(path)) return config;
+  const path = (0, import_node_path5.resolve)(options.path ?? DEFAULT_USAGE_STATE);
+  if (!options.path && !(0, import_node_fs6.existsSync)(path)) return config;
   return applyUsageState(config, loadUsageState(path));
 }
 function copyConfig2(config) {
@@ -1086,6 +1193,18 @@ async function main() {
     if (!result.valid) process.exit(1);
     return;
   }
+  if (args.command === "init" && args.subcommand === "github-actions") {
+    const config = loadConfig(args.config);
+    const output = writeGitHubActionsWorkflow(config, {
+      configPath: args.config ?? ".freelane.yml",
+      force: args.force,
+      output: args.output,
+      uses: args.uses
+    });
+    process.stdout.write(`created ${output}
+`);
+    return;
+  }
   if (args.command === "init") {
     const output = writeStarterConfig({ output: args.output, force: args.force });
     process.stdout.write(`created ${output}
@@ -1098,6 +1217,9 @@ function parseArgs(argv) {
   const args = { command: argv[0], format: "text" };
   let start = 1;
   if (args.command === "providers" || args.command === "config" || args.command === "usage") {
+    args.subcommand = argv[1];
+    start = 2;
+  } else if (args.command === "init" && argv[1] === "github-actions") {
     args.subcommand = argv[1];
     start = 2;
   }
@@ -1114,6 +1236,7 @@ function parseArgs(argv) {
     else if (value === "--token") args.token = argv[++i];
     else if (value === "--usage-state") args.usageState = argv[++i];
     else if (value === "--no-usage-state") args.noUsageState = true;
+    else if (value === "--uses") args.uses = argv[++i];
     else if (value === "--format") args.format = parseFormat(argv[++i]);
     else throw new Error(`unknown argument: ${value}`);
   }
@@ -1139,6 +1262,7 @@ function usage(code) {
   process.stdout.write([
     "Usage:",
     "  freelane init [--output .freelane.yml] [--force]",
+    "  freelane init github-actions [--config .freelane.yml] [--output .github/workflows/freelane-ci.yml] [--uses thoughts-on-things/freelane-ci@v0] [--force]",
     "  freelane config validate [--config .freelane.yml] [--format text|json]",
     "  freelane plan [--config .freelane.yml] [--usage-state .freelane-usage.json] [--format text|json]",
     "  freelane resolve --job <job> [--config .freelane.yml] [--usage-state .freelane-usage.json] [--format text|json|github-output]",
