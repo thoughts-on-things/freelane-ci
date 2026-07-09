@@ -1,5 +1,7 @@
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
+import { parse, stringify } from "yaml";
+import { resolveFreelane } from "./resolve";
 import type { FreelaneConfig } from "./types";
 
 export const DEFAULT_WORKFLOW_OUTPUT = ".github/workflows/freelane-ci.yml";
@@ -17,9 +19,37 @@ export interface WriteGitHubActionsWorkflowOptions extends GitHubActionsWorkflow
   output?: string;
 }
 
+export interface MigrateGitHubActionsOptions extends GitHubActionsWorkflowOptions {
+  cwd?: string;
+  dryRun?: boolean;
+  force?: boolean;
+  jobMap?: Record<string, string>;
+  workflow: string;
+}
+
 export interface WorkflowAlias {
   job: string;
   alias: string;
+}
+
+export interface GitHubActionsMigration {
+  changed: boolean;
+  content: string;
+  routed: MigratedJob[];
+  skipped: SkippedJob[];
+  workflow: string;
+}
+
+export interface MigratedJob {
+  alias: string;
+  freelaneJob: string;
+  runner: string;
+  workflowJob: string;
+}
+
+export interface SkippedJob {
+  reason: string;
+  workflowJob: string;
 }
 
 export function githubActionsAliases(config: FreelaneConfig): WorkflowAlias[] {
@@ -74,11 +104,7 @@ export function generateGitHubActionsWorkflow(
 
   lines.push(
     "    steps:",
-    "      - uses: actions/checkout@v7",
-    `      - name: Check ${yamlString(configPath)}`,
-    `        run: npx --yes freelane-ci@latest config validate --config ${shellArg(configPath)}`,
-    "      - name: Preview routing",
-    `        run: npx --yes freelane-ci@latest plan --config ${shellArg(configPath)}`
+    "      - uses: actions/checkout@v7"
   );
 
   for (const alias of aliases) {
@@ -123,6 +149,191 @@ export function writeGitHubActionsWorkflow(
   return output;
 }
 
+export function migrateGitHubActionsWorkflow(
+  config: FreelaneConfig,
+  options: MigrateGitHubActionsOptions
+): GitHubActionsMigration {
+  const workflow = resolve(options.cwd ?? process.cwd(), options.workflow);
+  const raw = readFileSync(workflow, "utf8");
+  const migrated = migrateGitHubActionsWorkflowContent(config, raw, options);
+
+  if (migrated.changed && !options.dryRun) {
+    writeFileSync(workflow, migrated.content, "utf8");
+  }
+
+  return { ...migrated, workflow };
+}
+
+export function migrateGitHubActionsWorkflowContent(
+  config: FreelaneConfig,
+  raw: string,
+  options: Omit<MigrateGitHubActionsOptions, "workflow" | "cwd"> = {}
+): GitHubActionsMigration {
+  const workflow = parse(raw) as Record<string, unknown>;
+  if (!isRecord(workflow.jobs)) throw new Error("workflow must define jobs");
+  if (workflow.jobs.freelane && !options.force) {
+    throw new Error("workflow already has a freelane job; pass --force to replace it");
+  }
+
+  const configPath = options.configPath ?? ".freelane.yml";
+  const aliases = githubActionsAliases(config);
+  const aliasByJob = new Map(aliases.map((alias) => [alias.job, alias.alias]));
+  const jobByAlias = new Map(aliases.map((alias) => [alias.alias, alias.job]));
+  const jobByRunner = uniqueRunnerMatches(config, aliases);
+  const jobs = { ...workflow.jobs };
+  const routed: MigratedJob[] = [];
+  const skipped: SkippedJob[] = [];
+  const routedAliases = new Set<string>();
+
+  delete jobs.freelane;
+
+  for (const [workflowJob, job] of Object.entries(jobs)) {
+    if (!isRecord(job)) {
+      skipped.push({ workflowJob, reason: "job is not an object" });
+      continue;
+    }
+
+    const runner = job["runs-on"];
+    if (typeof runner !== "string") {
+      skipped.push({ workflowJob, reason: "runs-on is not a single string" });
+      continue;
+    }
+
+    const freelaneJob = matchFreelaneJob(config, workflowJob, runner, options.jobMap ?? {}, jobByAlias, jobByRunner);
+    if (!freelaneJob) {
+      skipped.push({ workflowJob, reason: "no matching Freelane job" });
+      continue;
+    }
+
+    const alias = aliasByJob.get(freelaneJob);
+    if (!alias) {
+      skipped.push({ workflowJob, reason: "matching Freelane job has no alias" });
+      continue;
+    }
+
+    let needs: string | string[];
+    try {
+      needs = addNeed(job.needs, "freelane");
+    } catch (error) {
+      skipped.push({ workflowJob, reason: error instanceof Error ? error.message : String(error) });
+      continue;
+    }
+
+    jobs[workflowJob] = routedJob(job, needs, `\${{ needs.freelane.outputs.${alias} }}`);
+    routed.push({ workflowJob, freelaneJob, alias, runner });
+    routedAliases.add(alias);
+  }
+
+  if (routed.length === 0) {
+    return {
+      changed: false,
+      content: raw,
+      routed,
+      skipped,
+      workflow: ""
+    };
+  }
+
+  const routedAliasList = aliases.filter((alias) => routedAliases.has(alias.alias));
+  workflow.jobs = {
+    freelane: routerJob(routedAliasList, configPath, options.uses),
+    ...jobs
+  };
+
+  return {
+    changed: true,
+    content: stringify(workflow, { lineWidth: 0, nullStr: "" }),
+    routed,
+    skipped,
+    workflow: ""
+  };
+}
+
+function routerJob(aliases: WorkflowAlias[], configPath: string, uses = DEFAULT_ACTION_REF): Record<string, unknown> {
+  const outputs: Record<string, string> = {};
+  const steps: Array<Record<string, unknown>> = [{ uses: "actions/checkout@v7" }];
+
+  for (const alias of aliases) {
+    outputs[alias.alias] = `\${{ steps.${alias.alias}.outputs.label }}`;
+    outputs[`${alias.alias}_runs_on`] = `\${{ steps.${alias.alias}.outputs.runs_on }}`;
+    outputs[`${alias.alias}_provider`] = `\${{ steps.${alias.alias}.outputs.provider }}`;
+    outputs[`${alias.alias}_reason`] = `\${{ steps.${alias.alias}.outputs.reason }}`;
+    steps.push({
+      id: alias.alias,
+      name: `Route ${alias.job}`,
+      uses,
+      with: {
+        config: configPath,
+        job: alias.job,
+        validate: true
+      }
+    });
+  }
+
+  return {
+    name: "Choose runners",
+    "runs-on": "ubuntu-latest",
+    outputs,
+    steps
+  };
+}
+
+function routedJob(job: Record<string, unknown>, needs: string | string[], runsOn: string): Record<string, unknown> {
+  const next: Record<string, unknown> = {};
+  if (job.name !== undefined) next.name = job.name;
+  next.needs = needs;
+  next["runs-on"] = runsOn;
+
+  for (const [key, value] of Object.entries(job)) {
+    if (key !== "name" && key !== "needs" && key !== "runs-on") next[key] = value;
+  }
+
+  return next;
+}
+
+function matchFreelaneJob(
+  config: FreelaneConfig,
+  workflowJob: string,
+  runner: string,
+  explicitMap: Record<string, string>,
+  jobByAlias: Map<string, string>,
+  jobByRunner: Map<string, string>
+): string | undefined {
+  const mapped = explicitMap[workflowJob];
+  if (mapped && config.jobs[mapped]) return mapped;
+  if (config.jobs[workflowJob]) return workflowJob;
+  const aliasMatch = jobByAlias.get(sanitizeOutputName(workflowJob));
+  if (aliasMatch) return aliasMatch;
+  return jobByRunner.get(runner);
+}
+
+function uniqueRunnerMatches(config: FreelaneConfig, aliases: WorkflowAlias[]): Map<string, string> {
+  const matches = new Map<string, string[]>();
+
+  for (const alias of aliases) {
+    const decision = resolveFreelane(config, alias.job);
+    if (!decision.label) continue;
+    const jobs = matches.get(decision.label) ?? [];
+    jobs.push(alias.job);
+    matches.set(decision.label, jobs);
+  }
+
+  const unique = new Map<string, string>();
+  for (const [runner, jobs] of matches) {
+    if (jobs.length === 1) unique.set(runner, jobs[0]);
+  }
+  return unique;
+}
+
+function addNeed(existing: unknown, required: string): string | string[] {
+  if (existing === undefined) return required;
+  if (typeof existing === "string") return existing === required ? existing : [required, existing];
+  if (Array.isArray(existing) && existing.every((item) => typeof item === "string")) {
+    return existing.includes(required) ? existing : [required, ...existing];
+  }
+  throw new Error("cannot migrate job with non-string needs");
+}
+
 export function sanitizeOutputName(value: string): string {
   const sanitized = value
     .toLowerCase()
@@ -142,7 +353,6 @@ function shellSafe(value: string): string {
   return value.replace(/["`$\\]/g, "");
 }
 
-function shellArg(value: string): string {
-  if (/^[A-Za-z0-9_./@-]+$/.test(value)) return value;
-  return `'${value.replace(/'/g, "'\\''")}'`;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

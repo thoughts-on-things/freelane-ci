@@ -7,6 +7,8 @@ export {
   DEFAULT_WORKFLOW_OUTPUT,
   generateGitHubActionsWorkflow,
   githubActionsAliases,
+  migrateGitHubActionsWorkflow,
+  migrateGitHubActionsWorkflowContent,
   sanitizeOutputName,
   writeGitHubActionsWorkflow
 } from "./github-actions";

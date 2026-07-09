@@ -17,10 +17,6 @@ jobs:
       test_linux_reason: ${{ steps.test_linux.outputs.reason }}
     steps:
       - uses: actions/checkout@v7
-      - name: Check config
-        run: npx --yes freelane-ci@latest config validate --config examples/freelane.yml
-      - name: Preview routing
-        run: npx --yes freelane-ci@latest plan --config examples/freelane.yml
       - id: test_linux
         name: Route test-linux
         uses: thoughts-on-things/freelane-ci@v0

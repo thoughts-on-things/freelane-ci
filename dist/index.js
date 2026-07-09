@@ -54,6 +54,8 @@ __export(index_exports, {
   listProviders: () => listProviders,
   loadConfig: () => loadConfig,
   loadUsageState: () => loadUsageState,
+  migrateGitHubActionsWorkflow: () => migrateGitHubActionsWorkflow,
+  migrateGitHubActionsWorkflowContent: () => migrateGitHubActionsWorkflowContent,
   planFreelane: () => planFreelane,
   providerFactories: () => providerFactories,
   quotaFor: () => quotaFor,
@@ -364,6 +366,83 @@ function formatDecision(decision2, format) {
 // src/github-actions.ts
 var import_node_fs2 = require("fs");
 var import_node_path2 = require("path");
+var import_yaml2 = require("yaml");
+
+// src/resolve.ts
+function resolveFreelane(config, jobId) {
+  const job = config.jobs[jobId];
+  if (!job) throw new Error(`unknown job: ${jobId}`);
+  if (job.runner) {
+    return directDecision(jobId, job);
+  }
+  const providerIds = job.providers ?? Object.keys(config.providers);
+  const candidates = providerIds.map((id) => candidateFor(config, id, job)).filter((candidate) => Boolean(candidate));
+  if (candidates.length === 0) {
+    throw new Error(`no enabled provider can satisfy job: ${jobId}`);
+  }
+  const free = candidates.find((candidate) => !candidate.paidRequired);
+  if (free) return decision(jobId, free, `selected ${free.option.provider} within configured free quota`);
+  const fallback = fallbackCandidate(config, job, candidates);
+  if (fallback) return decision(jobId, fallback, `fallback to ${fallback.option.provider}; free quota unavailable`);
+  const paid = config.defaults?.paid ?? "avoid";
+  if (paid === "forbid") {
+    throw new Error(`free quota unavailable for job: ${jobId}`);
+  }
+  return decision(jobId, candidates[0], `selected ${candidates[0].option.provider}; free quota unavailable`);
+}
+function candidateFor(config, providerId, job) {
+  const provider = config.providers[providerId];
+  if (!provider || provider.enabled === false) return void 0;
+  const option2 = getRunnerOption(providerId, provider, job);
+  if (!option2) return void 0;
+  const reserve = config.defaults?.reserve?.[providerId] ?? 0;
+  const quota = quotaFor(provider, option2.quotaUnit, reserve);
+  const available = quota.available;
+  const paidRequired = quota.total !== Number.POSITIVE_INFINITY && available < option2.quotaBurn;
+  return { option: option2, available, paidRequired };
+}
+function fallbackCandidate(config, job, candidates) {
+  const fallbackIds = config.defaults?.fallback?.providers ?? [];
+  for (const id of fallbackIds) {
+    const existing = candidates.find((candidate) => candidate.option.provider === id);
+    if (existing) return existing;
+    const fallback = candidateFor(config, id, job);
+    if (fallback) return fallback;
+  }
+  return void 0;
+}
+function decision(jobId, candidate, reason) {
+  const runner = candidate.option.runner;
+  return {
+    job: jobId,
+    provider: candidate.option.provider,
+    runner,
+    label: typeof runner === "string" ? runner : void 0,
+    runsOnJson: JSON.stringify(runner),
+    reason,
+    paidRequired: candidate.paidRequired,
+    quotaUnit: candidate.option.quotaUnit,
+    quotaBurn: roundQuota(candidate.option.quotaBurn),
+    available: roundQuota(candidate.available)
+  };
+}
+function directDecision(jobId, job) {
+  const runner = job.runner ?? "ubuntu-latest";
+  return {
+    job: jobId,
+    provider: "manual",
+    runner,
+    label: typeof runner === "string" ? runner : void 0,
+    runsOnJson: JSON.stringify(runner),
+    reason: "selected job-specific runner",
+    paidRequired: false,
+    quotaUnit: "unlimited",
+    quotaBurn: 0,
+    available: Number.POSITIVE_INFINITY
+  };
+}
+
+// src/github-actions.ts
 var DEFAULT_WORKFLOW_OUTPUT = ".github/workflows/freelane-ci.yml";
 var DEFAULT_ACTION_REF = "thoughts-on-things/freelane-ci@v0";
 function githubActionsAliases(config) {
@@ -411,11 +490,7 @@ function generateGitHubActionsWorkflow(config, options = {}) {
   }
   lines.push(
     "    steps:",
-    "      - uses: actions/checkout@v7",
-    `      - name: Check ${yamlString(configPath)}`,
-    `        run: npx --yes freelane-ci@latest config validate --config ${shellArg(configPath)}`,
-    "      - name: Preview routing",
-    `        run: npx --yes freelane-ci@latest plan --config ${shellArg(configPath)}`
+    "      - uses: actions/checkout@v7"
   );
   for (const alias of aliases) {
     lines.push(
@@ -451,6 +526,151 @@ function writeGitHubActionsWorkflow(config, options = {}) {
   (0, import_node_fs2.writeFileSync)(output, generateGitHubActionsWorkflow(config, options), "utf8");
   return output;
 }
+function migrateGitHubActionsWorkflow(config, options) {
+  const workflow = (0, import_node_path2.resolve)(options.cwd ?? process.cwd(), options.workflow);
+  const raw = (0, import_node_fs2.readFileSync)(workflow, "utf8");
+  const migrated = migrateGitHubActionsWorkflowContent(config, raw, options);
+  if (migrated.changed && !options.dryRun) {
+    (0, import_node_fs2.writeFileSync)(workflow, migrated.content, "utf8");
+  }
+  return { ...migrated, workflow };
+}
+function migrateGitHubActionsWorkflowContent(config, raw, options = {}) {
+  const workflow = (0, import_yaml2.parse)(raw);
+  if (!isRecord2(workflow.jobs)) throw new Error("workflow must define jobs");
+  if (workflow.jobs.freelane && !options.force) {
+    throw new Error("workflow already has a freelane job; pass --force to replace it");
+  }
+  const configPath = options.configPath ?? ".freelane.yml";
+  const aliases = githubActionsAliases(config);
+  const aliasByJob = new Map(aliases.map((alias) => [alias.job, alias.alias]));
+  const jobByAlias = new Map(aliases.map((alias) => [alias.alias, alias.job]));
+  const jobByRunner = uniqueRunnerMatches(config, aliases);
+  const jobs = { ...workflow.jobs };
+  const routed = [];
+  const skipped = [];
+  const routedAliases = /* @__PURE__ */ new Set();
+  delete jobs.freelane;
+  for (const [workflowJob, job] of Object.entries(jobs)) {
+    if (!isRecord2(job)) {
+      skipped.push({ workflowJob, reason: "job is not an object" });
+      continue;
+    }
+    const runner = job["runs-on"];
+    if (typeof runner !== "string") {
+      skipped.push({ workflowJob, reason: "runs-on is not a single string" });
+      continue;
+    }
+    const freelaneJob = matchFreelaneJob(config, workflowJob, runner, options.jobMap ?? {}, jobByAlias, jobByRunner);
+    if (!freelaneJob) {
+      skipped.push({ workflowJob, reason: "no matching Freelane job" });
+      continue;
+    }
+    const alias = aliasByJob.get(freelaneJob);
+    if (!alias) {
+      skipped.push({ workflowJob, reason: "matching Freelane job has no alias" });
+      continue;
+    }
+    let needs;
+    try {
+      needs = addNeed(job.needs, "freelane");
+    } catch (error) {
+      skipped.push({ workflowJob, reason: error instanceof Error ? error.message : String(error) });
+      continue;
+    }
+    jobs[workflowJob] = routedJob(job, needs, `\${{ needs.freelane.outputs.${alias} }}`);
+    routed.push({ workflowJob, freelaneJob, alias, runner });
+    routedAliases.add(alias);
+  }
+  if (routed.length === 0) {
+    return {
+      changed: false,
+      content: raw,
+      routed,
+      skipped,
+      workflow: ""
+    };
+  }
+  const routedAliasList = aliases.filter((alias) => routedAliases.has(alias.alias));
+  workflow.jobs = {
+    freelane: routerJob(routedAliasList, configPath, options.uses),
+    ...jobs
+  };
+  return {
+    changed: true,
+    content: (0, import_yaml2.stringify)(workflow, { lineWidth: 0, nullStr: "" }),
+    routed,
+    skipped,
+    workflow: ""
+  };
+}
+function routerJob(aliases, configPath, uses = DEFAULT_ACTION_REF) {
+  const outputs = {};
+  const steps = [{ uses: "actions/checkout@v7" }];
+  for (const alias of aliases) {
+    outputs[alias.alias] = `\${{ steps.${alias.alias}.outputs.label }}`;
+    outputs[`${alias.alias}_runs_on`] = `\${{ steps.${alias.alias}.outputs.runs_on }}`;
+    outputs[`${alias.alias}_provider`] = `\${{ steps.${alias.alias}.outputs.provider }}`;
+    outputs[`${alias.alias}_reason`] = `\${{ steps.${alias.alias}.outputs.reason }}`;
+    steps.push({
+      id: alias.alias,
+      name: `Route ${alias.job}`,
+      uses,
+      with: {
+        config: configPath,
+        job: alias.job,
+        validate: true
+      }
+    });
+  }
+  return {
+    name: "Choose runners",
+    "runs-on": "ubuntu-latest",
+    outputs,
+    steps
+  };
+}
+function routedJob(job, needs, runsOn) {
+  const next = {};
+  if (job.name !== void 0) next.name = job.name;
+  next.needs = needs;
+  next["runs-on"] = runsOn;
+  for (const [key, value] of Object.entries(job)) {
+    if (key !== "name" && key !== "needs" && key !== "runs-on") next[key] = value;
+  }
+  return next;
+}
+function matchFreelaneJob(config, workflowJob, runner, explicitMap, jobByAlias, jobByRunner) {
+  const mapped = explicitMap[workflowJob];
+  if (mapped && config.jobs[mapped]) return mapped;
+  if (config.jobs[workflowJob]) return workflowJob;
+  const aliasMatch = jobByAlias.get(sanitizeOutputName(workflowJob));
+  if (aliasMatch) return aliasMatch;
+  return jobByRunner.get(runner);
+}
+function uniqueRunnerMatches(config, aliases) {
+  const matches = /* @__PURE__ */ new Map();
+  for (const alias of aliases) {
+    const decision2 = resolveFreelane(config, alias.job);
+    if (!decision2.label) continue;
+    const jobs = matches.get(decision2.label) ?? [];
+    jobs.push(alias.job);
+    matches.set(decision2.label, jobs);
+  }
+  const unique = /* @__PURE__ */ new Map();
+  for (const [runner, jobs] of matches) {
+    if (jobs.length === 1) unique.set(runner, jobs[0]);
+  }
+  return unique;
+}
+function addNeed(existing, required) {
+  if (existing === void 0) return required;
+  if (typeof existing === "string") return existing === required ? existing : [required, existing];
+  if (Array.isArray(existing) && existing.every((item) => typeof item === "string")) {
+    return existing.includes(required) ? existing : [required, ...existing];
+  }
+  throw new Error("cannot migrate job with non-string needs");
+}
 function sanitizeOutputName(value) {
   const sanitized = value.toLowerCase().replace(/[^a-z0-9_]+/g, "_").replace(/^_+|_+$/g, "").replace(/_+/g, "_");
   const fallback = sanitized || "job";
@@ -463,9 +683,8 @@ function yamlString(value) {
 function shellSafe(value) {
   return value.replace(/["`$\\]/g, "");
 }
-function shellArg(value) {
-  if (/^[A-Za-z0-9_./@-]+$/.test(value)) return value;
-  return `'${value.replace(/'/g, "'\\''")}'`;
+function isRecord2(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 // src/github-usage.ts
@@ -669,80 +888,6 @@ function writeStarterConfig(options = {}) {
   return output;
 }
 
-// src/resolve.ts
-function resolveFreelane(config, jobId) {
-  const job = config.jobs[jobId];
-  if (!job) throw new Error(`unknown job: ${jobId}`);
-  if (job.runner) {
-    return directDecision(jobId, job);
-  }
-  const providerIds = job.providers ?? Object.keys(config.providers);
-  const candidates = providerIds.map((id) => candidateFor(config, id, job)).filter((candidate) => Boolean(candidate));
-  if (candidates.length === 0) {
-    throw new Error(`no enabled provider can satisfy job: ${jobId}`);
-  }
-  const free = candidates.find((candidate) => !candidate.paidRequired);
-  if (free) return decision(jobId, free, `selected ${free.option.provider} within configured free quota`);
-  const fallback = fallbackCandidate(config, job, candidates);
-  if (fallback) return decision(jobId, fallback, `fallback to ${fallback.option.provider}; free quota unavailable`);
-  const paid = config.defaults?.paid ?? "avoid";
-  if (paid === "forbid") {
-    throw new Error(`free quota unavailable for job: ${jobId}`);
-  }
-  return decision(jobId, candidates[0], `selected ${candidates[0].option.provider}; free quota unavailable`);
-}
-function candidateFor(config, providerId, job) {
-  const provider = config.providers[providerId];
-  if (!provider || provider.enabled === false) return void 0;
-  const option2 = getRunnerOption(providerId, provider, job);
-  if (!option2) return void 0;
-  const reserve = config.defaults?.reserve?.[providerId] ?? 0;
-  const quota = quotaFor(provider, option2.quotaUnit, reserve);
-  const available = quota.available;
-  const paidRequired = quota.total !== Number.POSITIVE_INFINITY && available < option2.quotaBurn;
-  return { option: option2, available, paidRequired };
-}
-function fallbackCandidate(config, job, candidates) {
-  const fallbackIds = config.defaults?.fallback?.providers ?? [];
-  for (const id of fallbackIds) {
-    const existing = candidates.find((candidate) => candidate.option.provider === id);
-    if (existing) return existing;
-    const fallback = candidateFor(config, id, job);
-    if (fallback) return fallback;
-  }
-  return void 0;
-}
-function decision(jobId, candidate, reason) {
-  const runner = candidate.option.runner;
-  return {
-    job: jobId,
-    provider: candidate.option.provider,
-    runner,
-    label: typeof runner === "string" ? runner : void 0,
-    runsOnJson: JSON.stringify(runner),
-    reason,
-    paidRequired: candidate.paidRequired,
-    quotaUnit: candidate.option.quotaUnit,
-    quotaBurn: roundQuota(candidate.option.quotaBurn),
-    available: roundQuota(candidate.available)
-  };
-}
-function directDecision(jobId, job) {
-  const runner = job.runner ?? "ubuntu-latest";
-  return {
-    job: jobId,
-    provider: "manual",
-    runner,
-    label: typeof runner === "string" ? runner : void 0,
-    runsOnJson: JSON.stringify(runner),
-    reason: "selected job-specific runner",
-    paidRequired: false,
-    quotaUnit: "unlimited",
-    quotaBurn: 0,
-    available: Number.POSITIVE_INFINITY
-  };
-}
-
 // src/plan.ts
 function planFreelane(config, jobIds = Object.keys(config.jobs)) {
   const working = copyConfig(config);
@@ -857,7 +1002,7 @@ function formatProviderList(items, format) {
 // src/schema.ts
 var import__ = __toESM(require("ajv/dist/2020"));
 var import_node_fs5 = require("fs");
-var import_yaml2 = require("yaml");
+var import_yaml3 = require("yaml");
 
 // schemas/freelane.schema.json
 var freelane_schema_default = {
@@ -1037,7 +1182,7 @@ var freelane_schema_default = {
 
 // src/schema.ts
 function validateConfigFile(path = findConfigPath()) {
-  const config = (0, import_yaml2.parse)((0, import_node_fs5.readFileSync)(path, "utf8"));
+  const config = (0, import_yaml3.parse)((0, import_node_fs5.readFileSync)(path, "utf8"));
   const ajv = new import__.default({ allErrors: true });
   const validate = ajv.compile(freelane_schema_default);
   const schemaValid = validate(config);
@@ -1065,11 +1210,11 @@ function formatValidation(result, format) {
   ].join("\n") + "\n";
 }
 function semanticIssues(config) {
-  if (!isRecord2(config) || !isRecord2(config.providers) || !isRecord2(config.jobs)) return [];
+  if (!isRecord3(config) || !isRecord3(config.providers) || !isRecord3(config.jobs)) return [];
   const issues = [];
   const providerIds = new Set(Object.keys(config.providers));
-  if (isRecord2(config.defaults)) {
-    if (isRecord2(config.defaults.reserve)) {
+  if (isRecord3(config.defaults)) {
+    if (isRecord3(config.defaults.reserve)) {
       for (const providerId of Object.keys(config.defaults.reserve)) {
         if (!providerIds.has(providerId)) {
           issues.push({
@@ -1079,12 +1224,12 @@ function semanticIssues(config) {
         }
       }
     }
-    if (isRecord2(config.defaults.fallback)) {
+    if (isRecord3(config.defaults.fallback)) {
       issues.push(...providerReferenceIssues(config.defaults.fallback.providers, pointer("defaults", "fallback", "providers"), providerIds));
     }
   }
   for (const [jobId, job] of Object.entries(config.jobs)) {
-    if (isRecord2(job)) {
+    if (isRecord3(job)) {
       issues.push(...providerReferenceIssues(job.providers, pointer("jobs", jobId, "providers"), providerIds));
     }
   }
@@ -1103,7 +1248,7 @@ function providerReferenceIssues(value, path, providerIds) {
 function pointer(...segments) {
   return `/${segments.map((segment) => segment.replace(/~/g, "~0").replace(/\//g, "~1")).join("/")}`;
 }
-function isRecord2(value) {
+function isRecord3(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -1214,6 +1359,8 @@ function copyConfig2(config) {
   listProviders,
   loadConfig,
   loadUsageState,
+  migrateGitHubActionsWorkflow,
+  migrateGitHubActionsWorkflowContent,
   planFreelane,
   providerFactories,
   quotaFor,

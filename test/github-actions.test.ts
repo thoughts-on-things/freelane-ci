@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   generateGitHubActionsWorkflow,
   githubActionsAliases,
+  migrateGitHubActionsWorkflowContent,
   sanitizeOutputName,
   writeGitHubActionsWorkflow
 } from "../src/github-actions";
@@ -47,7 +48,6 @@ describe("github actions workflow generation", () => {
 
     expect(workflow).toContain("test_linux: ${{ steps.test_linux.outputs.label }}");
     expect(workflow).toContain("test_linux_runs_on: ${{ steps.test_linux.outputs.runs_on }}");
-    expect(workflow).toContain("run: npx --yes freelane-ci@latest config validate --config ci/freelane.yml");
     expect(workflow).toContain("uses: thoughts-on-things/freelane-ci@main");
     expect(workflow).toContain("runs-on: ${{ needs.freelane.outputs.rust_windows }}");
   });
@@ -60,5 +60,63 @@ describe("github actions workflow generation", () => {
     expect(readFileSync(path, "utf8")).toContain("name: Freelane CI");
     expect(() => writeGitHubActionsWorkflow(config, { cwd: dir })).toThrow(/already exists/);
     expect(() => writeGitHubActionsWorkflow(config, { cwd: dir, force: true })).not.toThrow();
+  });
+
+  it("migrates matching jobs in an existing workflow", () => {
+    const workflow = [
+      "name: CI",
+      "on:",
+      "  pull_request:",
+      "jobs:",
+      "  test-linux:",
+      "    runs-on: blacksmith-2vcpu-ubuntu-2404",
+      "    steps:",
+      "      - uses: actions/checkout@v7",
+      "      - run: npm test",
+      "  docs:",
+      "    runs-on: ubuntu-latest",
+      "    steps:",
+      "      - run: npm run docs",
+      ""
+    ].join("\n");
+
+    const migration = migrateGitHubActionsWorkflowContent(config, workflow);
+
+    expect(migration.changed).toBe(true);
+    expect(migration.routed).toEqual([
+      {
+        alias: "test_linux",
+        freelaneJob: "test-linux",
+        runner: "blacksmith-2vcpu-ubuntu-2404",
+        workflowJob: "test-linux"
+      }
+    ]);
+    expect(migration.content).toContain("freelane:");
+    expect(migration.content).toContain("needs: freelane");
+    expect(migration.content).toContain("runs-on: ${{ needs.freelane.outputs.test_linux }}");
+    expect(migration.content).toContain("Route test-linux");
+  });
+
+  it("uses explicit job maps during migration", () => {
+    const workflow = [
+      "name: CI",
+      "on: [pull_request]",
+      "jobs:",
+      "  check:",
+      "    runs-on: ubuntu-latest",
+      "    steps:",
+      "      - run: npm test",
+      ""
+    ].join("\n");
+
+    const migration = migrateGitHubActionsWorkflowContent(config, workflow, {
+      jobMap: {
+        check: "test-linux"
+      }
+    });
+
+    expect(migration.routed[0]?.workflowJob).toBe("check");
+    expect(migration.routed[0]?.freelaneJob).toBe("test-linux");
+    expect(migration.content).toContain("runs-on: ${{ needs.freelane.outputs.test_linux }}");
   });
 });

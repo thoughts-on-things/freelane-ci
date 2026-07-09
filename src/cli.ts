@@ -2,7 +2,7 @@
 import { loadConfig } from "./config";
 import { doctorConfig, formatDoctor } from "./doctor";
 import { formatDecision } from "./format";
-import { writeGitHubActionsWorkflow } from "./github-actions";
+import { migrateGitHubActionsWorkflow, writeGitHubActionsWorkflow } from "./github-actions";
 import { collectGitHubUsage, formatGitHubUsageState, writeGitHubUsageState } from "./github-usage";
 import { writeStarterConfig } from "./init";
 import { formatPlan, planFreelane } from "./plan";
@@ -26,7 +26,10 @@ interface Args {
   usageState?: string;
   noUsageState?: boolean;
   uses?: string;
+  dryRun?: boolean;
   format: "text" | "json" | "github-output";
+  jobMap: Record<string, string>;
+  workflow?: string;
 }
 
 async function main(): Promise<void> {
@@ -84,6 +87,25 @@ async function main(): Promise<void> {
     return;
   }
 
+  if (args.command === "migrate" && args.subcommand === "github-actions") {
+    if (!args.workflow) throw new Error("missing required --workflow");
+    const config = loadConfig(args.config);
+    const migration = migrateGitHubActionsWorkflow(config, {
+      configPath: args.config ?? ".freelane.yml",
+      dryRun: args.dryRun,
+      force: args.force,
+      jobMap: args.jobMap,
+      uses: args.uses,
+      workflow: args.workflow
+    });
+    if (args.dryRun) {
+      process.stdout.write(migration.content);
+      return;
+    }
+    process.stdout.write(formatMigrationSummary(migration.changed, migration.routed.length, migration.skipped.length, migration.workflow));
+    return;
+  }
+
   if (args.command === "init" && args.subcommand === "github-actions") {
     const config = loadConfig(args.config);
     const output = writeGitHubActionsWorkflow(config, {
@@ -106,12 +128,15 @@ async function main(): Promise<void> {
 }
 
 function parseArgs(argv: string[]): Args {
-  const args: Args = { command: argv[0], format: "text" };
+  const args: Args = { command: argv[0], format: "text", jobMap: {} };
   let start = 1;
   if (args.command === "providers" || args.command === "config" || args.command === "usage") {
     args.subcommand = argv[1];
     start = 2;
   } else if (args.command === "init" && argv[1] === "github-actions") {
+    args.subcommand = argv[1];
+    start = 2;
+  } else if (args.command === "migrate" && argv[1] === "github-actions") {
     args.subcommand = argv[1];
     start = 2;
   }
@@ -121,8 +146,10 @@ function parseArgs(argv: string[]): Args {
     if (value === "--help" || value === "-h") usage(0);
     if (value === "--config") args.config = argv[++i];
     else if (value === "--days") args.days = parsePositiveInt(argv[++i], "--days");
+    else if (value === "--dry-run") args.dryRun = true;
     else if (value === "--force") args.force = true;
     else if (value === "--job") args.job = argv[++i];
+    else if (value === "--job-map") addJobMap(args.jobMap, argv[++i]);
     else if (value === "--limit") args.limit = parsePositiveInt(argv[++i], "--limit");
     else if (value === "--output") args.output = argv[++i];
     else if (value === "--repo") args.repo = argv[++i];
@@ -130,6 +157,7 @@ function parseArgs(argv: string[]): Args {
     else if (value === "--usage-state") args.usageState = argv[++i];
     else if (value === "--no-usage-state") args.noUsageState = true;
     else if (value === "--uses") args.uses = argv[++i];
+    else if (value === "--workflow") args.workflow = argv[++i];
     else if (value === "--format") args.format = parseFormat(argv[++i]);
     else throw new Error(`unknown argument: ${value}`);
   }
@@ -147,6 +175,19 @@ function parsePositiveInt(value: string, flag: string): number {
   return parsed;
 }
 
+function addJobMap(map: Record<string, string>, value: string): void {
+  const [workflowJob, freelaneJob, ...extra] = value.split("=");
+  if (!workflowJob || !freelaneJob || extra.length > 0) {
+    throw new Error("--job-map must be workflow-job=freelane-job");
+  }
+  map[workflowJob] = freelaneJob;
+}
+
+function formatMigrationSummary(changed: boolean, routed: number, skipped: number, workflow: string): string {
+  if (!changed) return `no changes ${workflow}; routed 0 jobs, skipped ${skipped}\n`;
+  return `updated ${workflow}; routed ${routed} jobs, skipped ${skipped}\n`;
+}
+
 function loadConfigForRouting(args: Args) {
   const config = loadConfig(args.config);
   return applyUsageStateIfPresent(config, {
@@ -160,6 +201,7 @@ function usage(code: number): never {
     "Usage:",
     "  freelane init [--output .freelane.yml] [--force]",
     "  freelane init github-actions [--config .freelane.yml] [--output .github/workflows/freelane-ci.yml] [--uses thoughts-on-things/freelane-ci@v0] [--force]",
+    "  freelane migrate github-actions --workflow .github/workflows/ci.yml [--config .freelane.yml] [--job-map workflow-job=freelane-job] [--dry-run] [--force]",
     "  freelane config validate [--config .freelane.yml] [--format text|json]",
     "  freelane plan [--config .freelane.yml] [--usage-state .freelane-usage.json] [--format text|json]",
     "  freelane resolve --job <job> [--config .freelane.yml] [--usage-state .freelane-usage.json] [--format text|json|github-output]",

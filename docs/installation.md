@@ -6,6 +6,7 @@ No install is required for normal setup:
 
 ```bash
 npx freelane-ci@latest init
+npx freelane-ci@latest migrate github-actions --workflow .github/workflows/ci.yml
 npx freelane-ci@latest init github-actions
 npx freelane-ci@latest providers list
 ```
@@ -17,6 +18,7 @@ Install Freelane when you want a pinned CLI in your repo:
 ```bash
 npm install --save-dev freelane-ci
 npx freelane init --output .freelane.yml
+npx freelane migrate github-actions --workflow .github/workflows/ci.yml
 npx freelane init github-actions
 ```
 
@@ -27,14 +29,16 @@ Global installs are optional:
 ```bash
 npm install -g freelane-ci
 freelane init
+freelane migrate github-actions --workflow .github/workflows/ci.yml
 freelane init github-actions
 ```
 
 ## GitHub Action
 
-Prefer generating the workflow from the CLI:
+Prefer migrating or generating the workflow from the CLI:
 
 ```bash
+npx freelane-ci@latest migrate github-actions --workflow .github/workflows/ci.yml
 npx freelane-ci@latest init github-actions
 ```
 

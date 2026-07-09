@@ -8,6 +8,7 @@
 - Built-in runner labels for GitHub, Blacksmith, Ubicloud, WarpBuild, Namespace
 - GitHub usage collection from workflow job history
 - CLI-generated GitHub Actions workflows
+- GitHub Actions workflow migration
 - Config schema docs and examples
 
 ## Next

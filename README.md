@@ -55,8 +55,15 @@ npx freelane-ci@latest plan
 npx freelane-ci@latest init github-actions
 ```
 
-The generated workflow creates one `freelane` router job and friendly outputs for
-each configured job:
+Migrating an existing workflow is usually better:
+
+```bash
+npx freelane-ci@latest migrate github-actions --workflow .github/workflows/ci.yml
+```
+
+Use `--job-map check=test-linux` when a workflow job name differs from the
+Freelane job key. The migration adds one `freelane` router job and updates
+matched jobs to use friendly outputs:
 
 ```yaml
 jobs:
@@ -89,14 +96,10 @@ Try the CLI locally:
 npx freelane-ci@latest providers list
 npx freelane-ci@latest config validate --config examples/freelane.yml
 npx freelane-ci@latest usage report --config examples/freelane.yml
-npx freelane-ci@latest usage sync-github --repo owner/repo
 npx freelane-ci@latest plan --config examples/freelane.yml
 npx freelane-ci@latest resolve --config examples/freelane.yml --job test-linux --format json
 npx freelane-ci@latest providers doctor --config examples/freelane.yml
 ```
-
-For scheduled usage sync in GitHub Actions, see
-[examples/github-actions/freelane-usage-sync.yml](examples/github-actions/freelane-usage-sync.yml).
 
 ## Initial Providers
 

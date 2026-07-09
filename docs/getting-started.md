@@ -36,15 +36,15 @@ npx freelane-ci@latest resolve --job test-linux --format json
 Routing commands automatically read `.freelane-usage.json` when it exists. Use
 `--no-usage-state` to ignore it.
 
-## Generate A Workflow
+## Migrate A Workflow
 
 ```bash
-npx freelane-ci@latest init github-actions
+npx freelane-ci@latest migrate github-actions --workflow .github/workflows/ci.yml
 ```
 
 Freelane must run before the job it routes because GitHub chooses a runner before
-job steps execute. The generated workflow creates a `freelane` router job and one
-starter job per entry in `.freelane.yml`.
+job steps execute. The migration keeps your existing jobs, adds a `freelane`
+router job, and changes matched `runs-on` values to router outputs.
 
 ```yaml
 jobs:
@@ -66,6 +66,18 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - run: npm test
+```
+
+If a workflow job name differs from the Freelane job key, map it explicitly:
+
+```bash
+npx freelane-ci@latest migrate github-actions --workflow .github/workflows/ci.yml --job-map check=test-linux
+```
+
+Use `init github-actions` when starting a new workflow from scratch:
+
+```bash
+npx freelane-ci@latest init github-actions
 ```
 
 Use `runs-on: ${{ fromJSON(needs.freelane.outputs.test_linux_runs_on) }}` only
