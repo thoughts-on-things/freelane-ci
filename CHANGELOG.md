@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Dogfood Freelane `@main` in CI.
 - Add release-please npm publishing workflow.
 - Document CLI installation paths.
 - Add plain runner label output for simple GitHub workflows.
