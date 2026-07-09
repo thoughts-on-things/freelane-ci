@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Dogfood the local GitHub Action in CI.
 - Add GitHub Actions usage sync workflow example.
 - Add tag-based release workflow.
 - Verify provider label docs and correct Namespace macOS labels.

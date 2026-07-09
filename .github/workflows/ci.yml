@@ -21,3 +21,17 @@ jobs:
       - run: npm ci
       - run: npm run check
       - run: git diff --exit-code -- dist
+
+  action-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: route
+        uses: ./
+        with:
+          config: examples/freelane.yml
+          job: test-linux
+      - name: Check action outputs
+        run: |
+          test '${{ steps.route.outputs.provider }}' = 'blacksmith'
+          test '${{ steps.route.outputs.runs_on }}' = '"blacksmith-2vcpu-ubuntu-2404"'
