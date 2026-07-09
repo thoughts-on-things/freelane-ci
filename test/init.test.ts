@@ -2,6 +2,7 @@ import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { CONFIG_SCHEMA_URL } from "../src/constants";
 import { starterConfig, writeStarterConfig } from "../src/init";
 import { loadConfig } from "../src/config";
 
@@ -26,5 +27,6 @@ describe("writeStarterConfig", () => {
 
   it("emits yaml", () => {
     expect(starterConfig()).toContain("version: 1");
+    expect(starterConfig()).toContain(CONFIG_SCHEMA_URL);
   });
 });

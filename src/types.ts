@@ -34,6 +34,8 @@ export interface ProviderConfig {
   used_unit_minutes?: number;
   runner?: string | string[];
   profile?: string;
+  owner?: string;
+  scope?: "user" | "org" | "enterprise";
 }
 
 export interface JobConfig {

@@ -1,5 +1,6 @@
 import { existsSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { CONFIG_SCHEMA_URL } from "./constants";
 
 export interface InitOptions {
   output?: string;
@@ -9,7 +10,7 @@ export interface InitOptions {
 
 export function starterConfig(): string {
   return [
-    "$schema: ./schemas/freelane.schema.json",
+    `$schema: ${CONFIG_SCHEMA_URL}`,
     "version: 1",
     "",
     "defaults:",

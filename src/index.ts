@@ -1,5 +1,6 @@
 export { doctorConfig, formatDoctor } from "./doctor";
 export { findConfigPath, loadConfig } from "./config";
+export { CONFIG_SCHEMA_URL } from "./constants";
 export { formatDecision } from "./format";
 export { starterConfig, writeStarterConfig } from "./init";
 export { formatPlan, planFreelane } from "./plan";

@@ -31,6 +31,8 @@ interface ProviderConfig {
     used_unit_minutes?: number;
     runner?: string | string[];
     profile?: string;
+    owner?: string;
+    scope?: "user" | "org" | "enterprise";
 }
 interface JobConfig {
     os: RunnerOs;
@@ -84,6 +86,8 @@ declare function formatDoctor(report: DoctorReport, format: string): string;
 
 declare function findConfigPath(cwd?: string): string;
 declare function loadConfig(path?: string): FreelaneConfig;
+
+declare const CONFIG_SCHEMA_URL = "https://raw.githubusercontent.com/freelane-ci/freelane/main/schemas/freelane.schema.json";
 
 declare function formatDecision(decision: RoutingDecision, format: string): string;
 
@@ -141,4 +145,4 @@ interface ConfigValidationResult {
 declare function validateConfigFile(path?: string): ConfigValidationResult;
 declare function formatValidation(result: ConfigValidationResult, format: string): string;
 
-export { type Candidate, type DefaultsConfig, type FreelaneConfig, type JobConfig, type PaidPolicy, type ProviderConfig, type QuotaUnit, type RoutingDecision, type RunnerArch, type RunnerOption, type RunnerOs, displayUnit, doctorConfig, findConfigPath, formatDecision, formatDoctor, formatPlan, formatProviderList, formatValidation, getRunnerOption, listProviders, loadConfig, planFreelane, providerFactories, quotaFor, resolveFreelane, roundQuota, starterConfig, validateConfigFile, writeStarterConfig };
+export { CONFIG_SCHEMA_URL, type Candidate, type DefaultsConfig, type FreelaneConfig, type JobConfig, type PaidPolicy, type ProviderConfig, type QuotaUnit, type RoutingDecision, type RunnerArch, type RunnerOption, type RunnerOs, displayUnit, doctorConfig, findConfigPath, formatDecision, formatDoctor, formatPlan, formatProviderList, formatValidation, getRunnerOption, listProviders, loadConfig, planFreelane, providerFactories, quotaFor, resolveFreelane, roundQuota, starterConfig, validateConfigFile, writeStarterConfig };

@@ -30,6 +30,7 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 // src/index.ts
 var index_exports = {};
 __export(index_exports, {
+  CONFIG_SCHEMA_URL: () => CONFIG_SCHEMA_URL,
   displayUnit: () => displayUnit,
   doctorConfig: () => doctorConfig,
   findConfigPath: () => findConfigPath,
@@ -323,6 +324,9 @@ function isRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+// src/constants.ts
+var CONFIG_SCHEMA_URL = "https://raw.githubusercontent.com/freelane-ci/freelane/main/schemas/freelane.schema.json";
+
 // src/format.ts
 function formatDecision(decision2, format) {
   if (format === "json") return `${JSON.stringify(decision2, null, 2)}
@@ -344,7 +348,7 @@ var import_node_fs2 = require("fs");
 var import_node_path2 = require("path");
 function starterConfig() {
   return [
-    "$schema: ./schemas/freelane.schema.json",
+    `$schema: ${CONFIG_SCHEMA_URL}`,
     "version: 1",
     "",
     "defaults:",
@@ -820,6 +824,7 @@ function isRecord2(value) {
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
+  CONFIG_SCHEMA_URL,
   displayUnit,
   doctorConfig,
   findConfigPath,

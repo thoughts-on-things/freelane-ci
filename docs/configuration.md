@@ -3,7 +3,7 @@
 Freelane reads `.freelane.yml` by default.
 
 ```yaml
-$schema: ./schemas/freelane.schema.json
+$schema: https://raw.githubusercontent.com/freelane-ci/freelane/main/schemas/freelane.schema.json
 version: 1
 
 defaults:
@@ -83,6 +83,7 @@ Optional:
 ## Schema
 
 The JSON Schema lives at [schemas/freelane.schema.json](../schemas/freelane.schema.json).
+Published configs can use the remote schema URL from `freelane init`.
 
 Validate a config:
 

@@ -313,9 +313,14 @@ function formatDecision(decision2, format) {
 // src/init.ts
 var import_node_fs2 = require("fs");
 var import_node_path2 = require("path");
+
+// src/constants.ts
+var CONFIG_SCHEMA_URL = "https://raw.githubusercontent.com/freelane-ci/freelane/main/schemas/freelane.schema.json";
+
+// src/init.ts
 function starterConfig() {
   return [
-    "$schema: ./schemas/freelane.schema.json",
+    `$schema: ${CONFIG_SCHEMA_URL}`,
     "version: 1",
     "",
     "defaults:",
