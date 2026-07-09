@@ -41,6 +41,8 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -65,3 +67,12 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG_NAME: ${{ needs.release-please.outputs.tag_name }}
         run: gh release upload "$TAG_NAME" freelane-ci-*.tgz SHA256SUMS --clobber
+
+      - name: Move major action tag
+        env:
+          TAG_NAME: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          major="${TAG_NAME%%.*}"
+          target="$(git rev-list -n 1 "$TAG_NAME")"
+          git tag -f "$major" "$target"
+          git push origin "refs/tags/$major" --force
