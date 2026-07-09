@@ -1,9 +1,11 @@
 # Releasing
 
-Freelane ships the GitHub Action from `dist/`, so releases must include a fresh
-build.
+Freelane uses release-please. Merging Conventional Commits to `main` keeps a
+release PR updated. Merging that release PR bumps `package.json`, updates
+`CHANGELOG.md`, creates the tag, publishes the GitHub release, and then publishes
+the npm package.
 
-## Checklist
+## Local Checks
 
 ```bash
 npm ci
@@ -11,12 +13,11 @@ npm run check
 npm pack --dry-run
 ```
 
-Update `package.json` and `CHANGELOG.md`, then tag:
+## GitHub Setup
 
-```bash
-git tag v0.1.0
-git push origin main --tags
-```
+- Enable npm trusted publishing for `freelane-ci`.
+- Use `.github/workflows/release.yml` as the trusted workflow.
+- Keep the package public.
 
-Pushing a `v*` tag runs `.github/workflows/release.yml`, builds the project,
-packs the npm tarball, and creates a GitHub release.
+The release workflow also uploads the npm tarball and `SHA256SUMS` to the GitHub
+release.

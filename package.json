@@ -4,6 +4,7 @@
   "description": "Route GitHub Actions jobs across CI runner providers to use free credits first.",
   "license": "MIT",
   "private": false,
+  "packageManager": "npm@11.16.0",
   "type": "commonjs",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -25,6 +26,7 @@
   "scripts": {
     "build": "tsup src/action.ts src/cli.ts src/index.ts --format cjs --platform node --target node20 --dts --clean",
     "check": "npm run typecheck && npm test && npm run build",
+    "prepack": "npm run build",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
@@ -43,6 +45,9 @@
     "url": "https://github.com/thoughts-on-things/freelane-ci/issues"
   },
   "homepage": "https://github.com/thoughts-on-things/freelane-ci#readme",
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {
     "@actions/core": "^1.11.1",
     "ajv": "^8.20.0",

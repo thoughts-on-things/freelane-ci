@@ -17,6 +17,12 @@ Namespace, and other services. Freelane gives teams one small routing layer:
 
 ## Quick Start
 
+Install the CLI:
+
+```bash
+npm install -g freelane-ci
+```
+
 Create `.freelane.yml`:
 
 ```yaml
@@ -100,6 +106,7 @@ are later adapters because they require remote pipeline orchestration.
 
 ## Docs
 
+- [Installation](docs/installation.md)
 - [Getting started](docs/getting-started.md)
 - [Configuration](docs/configuration.md)
 - [Providers](docs/providers.md)

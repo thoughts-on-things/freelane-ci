@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add release-please npm publishing workflow.
+- Document CLI installation paths.
 - Add plain runner label output for simple GitHub workflows.
 - Dogfood the local GitHub Action in CI.
 - Add GitHub Actions usage sync workflow example.
