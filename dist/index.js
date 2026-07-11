@@ -51,6 +51,7 @@ __export(index_exports, {
   getRunnerOption: () => getRunnerOption,
   githubActionsAliases: () => githubActionsAliases,
   inferProvider: () => inferProvider,
+  learnedEstimateMinutes: () => learnedEstimateMinutes,
   listProviders: () => listProviders,
   loadConfig: () => loadConfig,
   loadUsageState: () => loadUsageState,
@@ -481,6 +482,7 @@ function generateGitHubActionsWorkflow(config, options = {}) {
     "",
     "permissions:",
     "  contents: read",
+    "  actions: read",
     "",
     "jobs:",
     "  freelane:",
@@ -489,28 +491,26 @@ function generateGitHubActionsWorkflow(config, options = {}) {
     "    outputs:"
   ];
   for (const alias of aliases) {
-    lines.push(
-      `      ${alias.alias}: \${{ steps.${alias.alias}.outputs.label }}`,
-      `      ${alias.alias}_runs_on: \${{ steps.${alias.alias}.outputs.runs_on }}`,
-      `      ${alias.alias}_provider: \${{ steps.${alias.alias}.outputs.provider }}`,
-      `      ${alias.alias}_reason: \${{ steps.${alias.alias}.outputs.reason }}`
-    );
+    lines.push(`      ${alias.alias}: \${{ steps.route.outputs.${alias.alias} }}`);
+    if (usesRunnerArray(config, alias.job)) {
+      lines.push(`      ${alias.alias}_runs_on: \${{ steps.route.outputs.${alias.alias}_runs_on }}`);
+    }
   }
   lines.push(
     "    steps:",
     "      - uses: actions/checkout@v7"
   );
-  for (const alias of aliases) {
-    lines.push(
-      `      - id: ${alias.alias}`,
-      `        name: Route ${yamlString(alias.job)}`,
-      `        uses: ${yamlString(uses)}`,
-      "        with:",
-      `          config: ${yamlString(configPath)}`,
-      `          job: ${yamlString(alias.job)}`,
-      "          validate: true"
-    );
-  }
+  lines.push(
+    "      - id: route",
+    "        name: Route workflow jobs",
+    `        uses: ${yamlString(uses)}`,
+    "        with:",
+    `          config: ${yamlString(configPath)}`,
+    `          jobs: ${yamlString(JSON.stringify(aliases))}`,
+    "          token: ${{ github.token }}",
+    "          repository: ${{ github.repository }}",
+    "          validate: true"
+  );
   for (const alias of aliases) {
     const runsOn = workflowRunsOn(config, alias.job, alias.alias);
     lines.push(
@@ -545,27 +545,32 @@ function migrateGitHubActionsWorkflow(config, options) {
   return { ...migrated, workflow };
 }
 function migrateGitHubActionsWorkflowContent(config, raw, options = {}) {
-  const workflow = (0, import_yaml2.parse)(raw);
+  const document = (0, import_yaml2.parseDocument)(raw, { keepSourceTokens: true });
+  if (document.errors.length) throw new Error(`invalid workflow YAML: ${document.errors[0]?.message}`);
+  const workflow = document.toJS();
   if (!isRecord2(workflow.jobs)) throw new Error("workflow must define jobs");
   if (workflow.jobs.freelane && !options.force) {
     throw new Error("workflow already has a freelane job; pass --force to replace it");
   }
   const configPath = options.configPath ?? ".freelane.yml";
+  const newline = newlineFor(raw);
   const aliases = githubActionsAliases(config);
   const aliasByJob = new Map(aliases.map((alias) => [alias.job, alias.alias]));
   const jobByAlias = new Map(aliases.map((alias) => [alias.alias, alias.job]));
   const jobByRunner = uniqueRunnerMatches(config, aliases);
-  const jobs = { ...workflow.jobs };
   const routed = [];
   const skipped = [];
   const routedAliases = /* @__PURE__ */ new Set();
-  delete jobs.freelane;
+  const edits = [];
+  const jobsNode = document.get("jobs", true);
+  if (!(0, import_yaml2.isMap)(jobsNode)) throw new Error("workflow jobs must be a mapping");
   for (const [workflowJob, freelaneJob] of Object.entries(options.jobMap ?? {})) {
     if (!config.jobs[freelaneJob]) {
       throw new Error(`--job-map ${workflowJob} references unknown Freelane job: ${freelaneJob}`);
     }
   }
-  for (const [workflowJob, job] of Object.entries(jobs)) {
+  for (const [workflowJob, job] of Object.entries(workflow.jobs)) {
+    if (workflowJob === "freelane") continue;
     if (!isRecord2(job)) {
       skipped.push({ workflowJob, reason: "job is not an object" });
       continue;
@@ -592,7 +597,36 @@ function migrateGitHubActionsWorkflowContent(config, raw, options = {}) {
       skipped.push({ workflowJob, reason: error instanceof Error ? error.message : String(error) });
       continue;
     }
-    jobs[workflowJob] = routedJob(job, needs, workflowRunsOn(config, freelaneJob, alias));
+    const jobPair = findMapPair(jobsNode, workflowJob);
+    if (!jobPair || !(0, import_yaml2.isMap)(jobPair.value)) {
+      skipped.push({ workflowJob, reason: "cannot locate job in YAML source" });
+      continue;
+    }
+    const runsOnPair = findMapPair(jobPair.value, "runs-on");
+    const runsOnRange = sourceRange(runsOnPair?.value);
+    if (!runsOnPair || !runsOnRange) {
+      skipped.push({ workflowJob, reason: "cannot locate runs-on in YAML source" });
+      continue;
+    }
+    edits.push({
+      start: runsOnRange[0],
+      end: runsOnRange[1],
+      text: workflowRunsOn(config, freelaneJob, alias)
+    });
+    const needsPair = findMapPair(jobPair.value, "needs");
+    const needsRange = sourceRange(needsPair?.value);
+    if (needsRange) {
+      edits.push({
+        start: needsRange[0],
+        end: needsRange[1],
+        text: yamlInline(needs)
+      });
+    } else if (sourceRange(runsOnPair.key)) {
+      const keyStart = sourceRange(runsOnPair.key)[0];
+      const start = lineStart(raw, keyStart);
+      const indent = raw.slice(start, keyStart);
+      edits.push({ start, end: start, text: `${indent}needs: freelane${newline}` });
+    }
     routed.push({ workflowJob, freelaneJob, alias, runner });
     routedAliases.add(alias);
   }
@@ -606,53 +640,123 @@ function migrateGitHubActionsWorkflowContent(config, raw, options = {}) {
     };
   }
   const routedAliasList = aliases.filter((alias) => routedAliases.has(alias.alias));
-  workflow.jobs = {
-    freelane: routerJob(routedAliasList, configPath, options.uses),
-    ...jobs
-  };
+  addPermissionsEdit(document, raw, edits, newline);
+  const router = routerJobYaml(config, routedAliasList, configPath, options.uses, newline);
+  const existingRouter = findMapPair(jobsNode, "freelane");
+  const existingRouterKeyRange = sourceRange(existingRouter?.key);
+  const existingRouterValueRange = sourceRange(existingRouter?.value);
+  if (existingRouterKeyRange && existingRouterValueRange) {
+    const start = lineStart(raw, existingRouterKeyRange[0]);
+    edits.push({ start, end: existingRouterValueRange[2] ?? existingRouterValueRange[1], text: router });
+  } else {
+    const first = jobsNode.items[0];
+    const firstKeyRange = sourceRange(first?.key);
+    if (!firstKeyRange) throw new Error("workflow jobs mapping is empty");
+    const start = lineStart(raw, firstKeyRange[0]);
+    edits.push({ start, end: start, text: `${router}${newline}` });
+  }
   return {
     changed: true,
-    content: (0, import_yaml2.stringify)(workflow, { lineWidth: 0, nullStr: "" }),
+    content: applyTextEdits(raw, edits),
     routed,
     skipped,
     workflow: ""
   };
 }
-function routerJob(aliases, configPath, uses = DEFAULT_ACTION_REF) {
-  const outputs = {};
-  const steps = [{ uses: "actions/checkout@v7" }];
+function routerJobYaml(config, aliases, configPath, uses = DEFAULT_ACTION_REF, newline = "\n") {
+  const lines = [
+    "  freelane:",
+    "    name: Choose runners",
+    "    runs-on: ubuntu-latest",
+    "    outputs:"
+  ];
   for (const alias of aliases) {
-    outputs[alias.alias] = `\${{ steps.${alias.alias}.outputs.label }}`;
-    outputs[`${alias.alias}_runs_on`] = `\${{ steps.${alias.alias}.outputs.runs_on }}`;
-    outputs[`${alias.alias}_provider`] = `\${{ steps.${alias.alias}.outputs.provider }}`;
-    outputs[`${alias.alias}_reason`] = `\${{ steps.${alias.alias}.outputs.reason }}`;
-    steps.push({
-      id: alias.alias,
-      name: `Route ${alias.job}`,
-      uses,
-      with: {
-        config: configPath,
-        job: alias.job,
-        validate: true
-      }
-    });
+    lines.push(`      ${alias.alias}: \${{ steps.route.outputs.${alias.alias} }}`);
+    if (usesRunnerArray(config, alias.job)) {
+      lines.push(`      ${alias.alias}_runs_on: \${{ steps.route.outputs.${alias.alias}_runs_on }}`);
+    }
   }
-  return {
-    name: "Choose runners",
-    "runs-on": "ubuntu-latest",
-    outputs,
-    steps
-  };
+  lines.push(
+    "    steps:",
+    "      - uses: actions/checkout@v7",
+    "      - id: route",
+    "        name: Route workflow jobs",
+    `        uses: ${yamlString(uses)}`,
+    "        with:",
+    `          config: ${yamlString(configPath)}`,
+    `          jobs: ${yamlString(JSON.stringify(aliases))}`,
+    "          token: ${{ github.token }}",
+    "          repository: ${{ github.repository }}",
+    "          validate: true",
+    ""
+  );
+  return lines.join(newline);
 }
-function routedJob(job, needs, runsOn) {
-  const next = {};
-  if (job.name !== void 0) next.name = job.name;
-  next.needs = needs;
-  next["runs-on"] = runsOn;
-  for (const [key, value] of Object.entries(job)) {
-    if (key !== "name" && key !== "needs" && key !== "runs-on") next[key] = value;
+function findMapPair(map, key) {
+  return map.items.find((item) => {
+    const pair = item;
+    return (0, import_yaml2.isScalar)(pair.key) && String(pair.key.value) === key;
+  });
+}
+function sourceRange(value) {
+  if (!value || typeof value !== "object" || !("range" in value)) return void 0;
+  return value.range;
+}
+function addPermissionsEdit(document, raw, edits, newline) {
+  const permissions = document.get("permissions", true);
+  if ((0, import_yaml2.isMap)(permissions)) {
+    if (findMapPair(permissions, "actions")) return;
+    if (permissions.flow) {
+      const range = sourceRange(permissions);
+      if (!range) return;
+      const close = raw.lastIndexOf("}", range[1]);
+      let insert = close;
+      while (insert > range[0] && /\s/.test(raw[insert - 1])) insert -= 1;
+      if (close >= range[0]) edits.push({ start: insert, end: insert, text: `${permissions.items.length ? ", " : ""}actions: read` });
+      return;
+    }
+    const last = permissions.items.at(-1);
+    const valueRange = sourceRange(last?.value);
+    const keyRange = sourceRange(last?.key);
+    if (!valueRange || !keyRange) return;
+    const end = valueRange[2] ?? valueRange[1];
+    const start2 = lineStart(raw, keyRange[0]);
+    const indent = raw.slice(start2, keyRange[0]);
+    edits.push({ start: end, end, text: `${indent}actions: read${newline}` });
+    return;
   }
-  return next;
+  if (permissions !== void 0) return;
+  const root = document.contents;
+  if (!(0, import_yaml2.isMap)(root)) return;
+  const jobsPair = findMapPair(root, "jobs");
+  const jobsKeyRange = sourceRange(jobsPair?.key);
+  if (!jobsKeyRange) return;
+  const start = lineStart(raw, jobsKeyRange[0]);
+  edits.push({
+    start,
+    end: start,
+    text: `permissions:${newline}  contents: read${newline}  actions: read${newline}${newline}`
+  });
+}
+function applyTextEdits(raw, edits) {
+  const sorted = [...edits].sort((left, right) => right.start - left.start || right.end - left.end);
+  let output = raw;
+  let boundary = raw.length + 1;
+  for (const edit of sorted) {
+    if (edit.end > boundary) throw new Error("overlapping workflow edits");
+    output = output.slice(0, edit.start) + edit.text + output.slice(edit.end);
+    boundary = edit.start;
+  }
+  return output;
+}
+function lineStart(raw, offset) {
+  return raw.lastIndexOf("\n", offset - 1) + 1;
+}
+function newlineFor(raw) {
+  return raw.includes("\r\n") ? "\r\n" : "\n";
+}
+function yamlInline(value) {
+  return typeof value === "string" ? yamlString(value) : JSON.stringify(value);
 }
 function matchFreelaneJob(config, workflowJob, runner, explicitMap, jobByAlias, jobByRunner) {
   const mapped = explicitMap[workflowJob];
@@ -686,13 +790,15 @@ function addNeed(existing, required) {
   throw new Error("cannot migrate job with non-string needs");
 }
 function workflowRunsOn(config, job, alias) {
-  const jobConfig = config.jobs[job];
-  const providerIds = jobConfig.providers ?? Object.keys(config.providers);
-  const mayUseRunnerArray = Array.isArray(jobConfig.runner) || providerIds.some((provider) => Array.isArray(config.providers[provider]?.runner));
-  if (mayUseRunnerArray) {
+  if (usesRunnerArray(config, job)) {
     return `\${{ fromJSON(needs.freelane.outputs.${alias}_runs_on) }}`;
   }
   return `\${{ needs.freelane.outputs.${alias} }}`;
+}
+function usesRunnerArray(config, job) {
+  const jobConfig = config.jobs[job];
+  const providerIds = jobConfig.providers ?? Object.keys(config.providers);
+  return Array.isArray(jobConfig.runner) || providerIds.some((provider) => Array.isArray(config.providers[provider]?.runner));
 }
 function sanitizeOutputName(value) {
   const sanitized = value.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_/, "").replace(/_$/, "");
@@ -723,7 +829,7 @@ async function collectGitHubUsage(options) {
   const now = options.now ?? /* @__PURE__ */ new Date();
   const days = options.days ?? DEFAULT_DAYS;
   const limit = options.limit ?? DEFAULT_LIMIT;
-  const since = new Date(now.getTime() - days * 24 * 60 * 60 * 1e3);
+  const since = options.since ?? new Date(now.getTime() - days * 24 * 60 * 60 * 1e3);
   const headers = githubHeaders(options.token);
   const runs = await listRuns({ apiUrl, owner, repo, since, limit, headers, fetchImpl });
   const jobs = [];
@@ -742,8 +848,16 @@ async function collectGitHubUsage(options) {
     runCount: runs.length,
     jobCount: jobs.length,
     providers: providerTotals(jobs),
-    jobs
+    jobs,
+    estimates: durationEstimates(jobs)
   };
+}
+function learnedEstimateMinutes(jobId, job, state) {
+  const estimates = state.estimates ?? durationEstimates(state.jobs);
+  const normalized = normalizeJobName(jobId);
+  const exact = Object.entries(estimates.names).filter(([name]) => name === normalized || name.startsWith(`${normalized} (`) || name.startsWith(`${normalized} /`)).map(([, estimate2]) => estimate2);
+  if (exact.length) return Math.max(...exact.map((estimate2) => estimate2.p75));
+  return estimates.platforms[platformForJob(job)]?.p75;
 }
 function writeGitHubUsageState(state, output = ".freelane-usage.json") {
   const path = (0, import_node_path3.resolve)(output);
@@ -804,7 +918,58 @@ function providerTotals(jobs) {
   }
   return totals;
 }
+function durationEstimates(jobs) {
+  const names = /* @__PURE__ */ new Map();
+  const platforms = /* @__PURE__ */ new Map();
+  for (const job of jobs) {
+    if (job.conclusion && job.conclusion !== "success") continue;
+    if (/^(choose runners|freelane|route workflow jobs)$/i.test(job.name)) continue;
+    addSample(names, normalizeJobName(job.name), job.durationMinutes);
+    const platform = platformForLabels(job.labels);
+    if (platform) addSample(platforms, platform, job.durationMinutes);
+  }
+  return {
+    names: Object.fromEntries([...names].map(([key, values]) => [key, estimate(values)])),
+    platforms: Object.fromEntries([...platforms].map(([key, values]) => [key, estimate(values)]))
+  };
+}
+function addSample(groups, key, value) {
+  if (!key || value <= 0) return;
+  const values = groups.get(key) ?? [];
+  values.push(value);
+  groups.set(key, values);
+}
+function estimate(values) {
+  const sorted = [...values].sort((left, right) => left - right);
+  return {
+    samples: sorted.length,
+    p50: percentile(sorted, 0.5),
+    p75: percentile(sorted, 0.75),
+    p90: percentile(sorted, 0.9)
+  };
+}
+function percentile(sorted, quantile) {
+  return roundQuota(sorted[Math.max(0, Math.ceil(sorted.length * quantile) - 1)] ?? 0);
+}
+function normalizeJobName(value) {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
+function platformForJob(job) {
+  return `${job.os}:${job.arch ?? "x64"}`;
+}
+function platformForLabels(labels) {
+  const value = labels.join(" ").toLowerCase();
+  const os = /windows/.test(value) ? "windows" : /macos/.test(value) ? "macos" : /ubuntu|linux/.test(value) ? "linux" : void 0;
+  if (!os) return void 0;
+  const arch = /(?:arm64|ubuntu-(?:2204|2404|24\.04)-arm|ubuntu-\d+-arm)/.test(value) || os === "macos" ? "arm64" : "x64";
+  return `${os}:${arch}`;
+}
 function quotaMinutes(job) {
+  if (job.provider === "github") {
+    const labels = job.labels.join(" ").toLowerCase();
+    const multiplier = labels.includes("windows") ? 2 : labels.includes("macos") ? 10 : 1;
+    return roundQuota(job.durationMinutes * multiplier);
+  }
   if (job.provider !== "blacksmith") return job.durationMinutes;
   const label = job.labels.find((value) => value.startsWith("blacksmith-"));
   const match = label && /^blacksmith-(\d+)vcpu-(ubuntu-[^-]+(?:-arm)?|windows-|macos-)/.exec(label);
@@ -907,7 +1072,6 @@ function starterConfig() {
     "    os: linux",
     "    arch: x64",
     "    min_vcpu: 2",
-    "    estimate_minutes: 8",
     "    providers: [github, blacksmith, ubicloud, warpbuild]",
     ""
   ].join("\n");
@@ -1142,15 +1306,14 @@ function jobConfigFromRunner(runner) {
     return {
       os: platform.startsWith("ubuntu") ? "linux" : platform.startsWith("windows") ? "windows" : "macos",
       arch: platform.endsWith("-arm") || platform.startsWith("macos") ? "arm64" : "x64",
-      min_vcpu: Number(blacksmith[1]),
-      estimate_minutes: 10
+      min_vcpu: Number(blacksmith[1])
     };
   }
   const github = /^(ubuntu|windows|macos)-(?:latest|\d+(?:\.\d+)?)(-arm)?$/.exec(runner);
   if (!github) return void 0;
   const os = github[1] === "ubuntu" ? "linux" : github[1];
   const arch = github[2] || os === "macos" ? "arm64" : "x64";
-  return { os, arch, min_vcpu: 2, estimate_minutes: 10 };
+  return { os, arch, min_vcpu: 2 };
 }
 function normalizeProviders(values) {
   const providers2 = values?.length ? [...new Set(values.flatMap((value) => value.split(",")).filter(Boolean))] : [...SUPPORTED_PROVIDERS];
@@ -1478,7 +1641,12 @@ function applyUsageState(config, state) {
   for (const [providerId, total] of Object.entries(state.providers)) {
     const provider = next.providers[providerId];
     if (!provider || quotaUnitForProvider(provider) !== "minutes") continue;
-    provider.used_minutes = roundQuota((provider.used_minutes ?? 0) + total.minutes);
+    provider.used_minutes = roundQuota(Math.max(provider.used_minutes ?? 0, total.minutes));
+  }
+  for (const [jobId, job] of Object.entries(next.jobs)) {
+    if (job.estimate_minutes !== void 0) continue;
+    const learned = learnedEstimateMinutes(jobId, job, state);
+    if (learned !== void 0) job.estimate_minutes = learned;
   }
   return next;
 }
@@ -1523,6 +1691,7 @@ function copyConfig2(config) {
   getRunnerOption,
   githubActionsAliases,
   inferProvider,
+  learnedEstimateMinutes,
   listProviders,
   loadConfig,
   loadUsageState,

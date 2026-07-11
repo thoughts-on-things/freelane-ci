@@ -17,6 +17,16 @@ describe("applyUsageState", () => {
     expect(config.providers.blacksmith.used_minutes).toBeUndefined();
   });
 
+  it("treats synced usage as authoritative instead of double counting configured state", () => {
+    const config = configWithProviders({
+      github: { enabled: true, free_minutes_per_month: 100, used_minutes: 10 }
+    });
+
+    const next = applyUsageState(config, stateWithProviders({ github: { jobs: 2, minutes: 25 } }));
+
+    expect(next.providers.github.used_minutes).toBe(25);
+  });
+
   it("leaves credit-based providers unchanged", () => {
     const config = configWithProviders({
       ubicloud: { enabled: true, free_credit_usd_per_month: 2 }
@@ -27,6 +37,22 @@ describe("applyUsageState", () => {
     }));
 
     expect(next.providers.ubicloud.used_credit_usd).toBeUndefined();
+  });
+
+  it("applies learned P75 durations when config has no override", () => {
+    const config = configWithProviders({ github: { enabled: true, free_minutes_per_month: 100 } });
+    const state = stateWithProviders({ github: { jobs: 3, minutes: 14 } });
+    state.estimates = {
+      names: {},
+      platforms: {
+        "linux:x64": { samples: 3, p50: 4, p75: 7.5, p90: 9 }
+      }
+    };
+
+    const next = applyUsageState(config, state);
+
+    expect(next.jobs.test.estimate_minutes).toBe(7.5);
+    expect(config.jobs.test.estimate_minutes).toBeUndefined();
   });
 });
 

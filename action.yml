@@ -4,8 +4,11 @@ author: Freelane CI contributors
 
 inputs:
   job:
-    description: Job key from the Freelane config.
-    required: true
+    description: Single job key from the Freelane config. Use jobs for batch routing.
+    required: false
+  jobs:
+    description: JSON array of job and alias objects for one reserved workflow plan.
+    required: false
   config:
     description: Path to the Freelane config file.
     required: false
@@ -14,6 +17,20 @@ inputs:
     description: Validate config schema and provider references before resolving.
     required: false
     default: "true"
+  token:
+    description: GitHub token used to learn durations and current repository usage.
+    required: false
+  repository:
+    description: Repository in owner/name form. Defaults to GITHUB_REPOSITORY.
+    required: false
+  sync_usage:
+    description: Fetch recent GitHub Actions history before routing.
+    required: false
+    default: "true"
+  history_limit:
+    description: Maximum completed workflow runs to learn from.
+    required: false
+    default: "100"
 
 outputs:
   runs_on:

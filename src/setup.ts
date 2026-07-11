@@ -152,15 +152,14 @@ function jobConfigFromRunner(runner: string): JobConfig | undefined {
     return {
       os: platform.startsWith("ubuntu") ? "linux" : platform.startsWith("windows") ? "windows" : "macos",
       arch: platform.endsWith("-arm") || platform.startsWith("macos") ? "arm64" : "x64",
-      min_vcpu: Number(blacksmith[1]),
-      estimate_minutes: 10
+      min_vcpu: Number(blacksmith[1])
     };
   }
   const github = /^(ubuntu|windows|macos)-(?:latest|\d+(?:\.\d+)?)(-arm)?$/.exec(runner);
   if (!github) return undefined;
   const os: RunnerOs = github[1] === "ubuntu" ? "linux" : github[1] as RunnerOs;
   const arch: RunnerArch = github[2] || os === "macos" ? "arm64" : "x64";
-  return { os, arch, min_vcpu: 2, estimate_minutes: 10 };
+  return { os, arch, min_vcpu: 2 };
 }
 
 function normalizeProviders(values: string[] | undefined): string[] {

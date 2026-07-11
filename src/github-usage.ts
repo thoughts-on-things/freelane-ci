@@ -1,6 +1,7 @@
 import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { roundQuota } from "./quota";
+import type { JobConfig } from "./types";
 
 export interface GitHubUsageOptions {
   repo: string;
@@ -10,6 +11,7 @@ export interface GitHubUsageOptions {
   output?: string;
   apiUrl?: string;
   now?: Date;
+  since?: Date;
   fetchImpl?: FetchLike;
 }
 
@@ -31,6 +33,18 @@ export interface GitHubUsageProviderTotal {
   minutes: number;
 }
 
+export interface DurationEstimate {
+  samples: number;
+  p50: number;
+  p75: number;
+  p90: number;
+}
+
+export interface GitHubDurationEstimates {
+  names: Record<string, DurationEstimate>;
+  platforms: Record<string, DurationEstimate>;
+}
+
 export interface GitHubUsageState {
   source: "github-actions";
   repository: string;
@@ -40,6 +54,7 @@ export interface GitHubUsageState {
   jobCount: number;
   providers: Record<string, GitHubUsageProviderTotal>;
   jobs: GitHubUsageJob[];
+  estimates?: GitHubDurationEstimates;
 }
 
 type FetchLike = (url: string, init?: { headers?: Record<string, string> }) => Promise<{
@@ -85,7 +100,7 @@ export async function collectGitHubUsage(options: GitHubUsageOptions): Promise<G
   const now = options.now ?? new Date();
   const days = options.days ?? DEFAULT_DAYS;
   const limit = options.limit ?? DEFAULT_LIMIT;
-  const since = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+  const since = options.since ?? new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
   const headers = githubHeaders(options.token);
 
   const runs = await listRuns({ apiUrl, owner, repo, since, limit, headers, fetchImpl });
@@ -107,8 +122,23 @@ export async function collectGitHubUsage(options: GitHubUsageOptions): Promise<G
     runCount: runs.length,
     jobCount: jobs.length,
     providers: providerTotals(jobs),
-    jobs
+    jobs,
+    estimates: durationEstimates(jobs)
   };
+}
+
+export function learnedEstimateMinutes(
+  jobId: string,
+  job: JobConfig,
+  state: GitHubUsageState
+): number | undefined {
+  const estimates = state.estimates ?? durationEstimates(state.jobs);
+  const normalized = normalizeJobName(jobId);
+  const exact = Object.entries(estimates.names)
+    .filter(([name]) => name === normalized || name.startsWith(`${normalized} (`) || name.startsWith(`${normalized} /`))
+    .map(([, estimate]) => estimate);
+  if (exact.length) return Math.max(...exact.map((estimate) => estimate.p75));
+  return estimates.platforms[platformForJob(job)]?.p75;
 }
 
 export function writeGitHubUsageState(state: GitHubUsageState, output = ".freelane-usage.json"): string {
@@ -183,7 +213,65 @@ function providerTotals(jobs: GitHubUsageJob[]): Record<string, GitHubUsageProvi
   return totals;
 }
 
+function durationEstimates(jobs: GitHubUsageJob[]): GitHubDurationEstimates {
+  const names = new Map<string, number[]>();
+  const platforms = new Map<string, number[]>();
+  for (const job of jobs) {
+    if (job.conclusion && job.conclusion !== "success") continue;
+    if (/^(choose runners|freelane|route workflow jobs)$/i.test(job.name)) continue;
+    addSample(names, normalizeJobName(job.name), job.durationMinutes);
+    const platform = platformForLabels(job.labels);
+    if (platform) addSample(platforms, platform, job.durationMinutes);
+  }
+  return {
+    names: Object.fromEntries([...names].map(([key, values]) => [key, estimate(values)])),
+    platforms: Object.fromEntries([...platforms].map(([key, values]) => [key, estimate(values)]))
+  };
+}
+
+function addSample(groups: Map<string, number[]>, key: string, value: number): void {
+  if (!key || value <= 0) return;
+  const values = groups.get(key) ?? [];
+  values.push(value);
+  groups.set(key, values);
+}
+
+function estimate(values: number[]): DurationEstimate {
+  const sorted = [...values].sort((left, right) => left - right);
+  return {
+    samples: sorted.length,
+    p50: percentile(sorted, 0.5),
+    p75: percentile(sorted, 0.75),
+    p90: percentile(sorted, 0.9)
+  };
+}
+
+function percentile(sorted: number[], quantile: number): number {
+  return roundQuota(sorted[Math.max(0, Math.ceil(sorted.length * quantile) - 1)] ?? 0);
+}
+
+function normalizeJobName(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function platformForJob(job: JobConfig): string {
+  return `${job.os}:${job.arch ?? "x64"}`;
+}
+
+function platformForLabels(labels: string[]): string | undefined {
+  const value = labels.join(" ").toLowerCase();
+  const os = /windows/.test(value) ? "windows" : /macos/.test(value) ? "macos" : /ubuntu|linux/.test(value) ? "linux" : undefined;
+  if (!os) return undefined;
+  const arch = /(?:arm64|ubuntu-(?:2204|2404|24\.04)-arm|ubuntu-\d+-arm)/.test(value) || os === "macos" ? "arm64" : "x64";
+  return `${os}:${arch}`;
+}
+
 function quotaMinutes(job: GitHubUsageJob): number {
+  if (job.provider === "github") {
+    const labels = job.labels.join(" ").toLowerCase();
+    const multiplier = labels.includes("windows") ? 2 : labels.includes("macos") ? 10 : 1;
+    return roundQuota(job.durationMinutes * multiplier);
+  }
   if (job.provider !== "blacksmith") return job.durationMinutes;
   const label = job.labels.find((value) => value.startsWith("blacksmith-"));
   const match = label && /^blacksmith-(\d+)vcpu-(ubuntu-[^-]+(?:-arm)?|windows-|macos-)/.exec(label);

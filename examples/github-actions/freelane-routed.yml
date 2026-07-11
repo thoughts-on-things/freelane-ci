@@ -6,23 +6,26 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+  actions: read
+
 jobs:
   freelane:
     name: Choose runners
     runs-on: ubuntu-latest
     outputs:
-      test_linux: ${{ steps.test_linux.outputs.label }}
-      test_linux_runs_on: ${{ steps.test_linux.outputs.runs_on }}
-      test_linux_provider: ${{ steps.test_linux.outputs.provider }}
-      test_linux_reason: ${{ steps.test_linux.outputs.reason }}
+      test_linux: ${{ steps.route.outputs.test_linux }}
     steps:
       - uses: actions/checkout@v7
-      - id: test_linux
-        name: Route test-linux
+      - id: route
+        name: Route workflow jobs
         uses: thoughts-on-things/freelane-ci@v0
         with:
           config: examples/freelane.yml
-          job: test-linux
+          jobs: '[{"job":"test-linux","alias":"test_linux"}]'
+          token: ${{ github.token }}
+          repository: ${{ github.repository }}
           validate: true
 
   test:

@@ -47,8 +47,9 @@ describe("github actions workflow generation", () => {
       uses: "thoughts-on-things/freelane-ci@main"
     });
 
-    expect(workflow).toContain("test_linux: ${{ steps.test_linux.outputs.label }}");
-    expect(workflow).toContain("test_linux_runs_on: ${{ steps.test_linux.outputs.runs_on }}");
+    expect(workflow).toContain("test_linux: ${{ steps.route.outputs.test_linux }}");
+    expect(workflow).not.toContain("test_linux_runs_on:");
+    expect(workflow.match(/uses: thoughts-on-things\/freelane-ci@main/g)).toHaveLength(1);
     expect(workflow).toContain("uses: thoughts-on-things/freelane-ci@main");
     expect(workflow).toContain("runs-on: ${{ needs.freelane.outputs.rust_windows }}");
   });
@@ -95,7 +96,57 @@ describe("github actions workflow generation", () => {
     expect(migration.content).toContain("freelane:");
     expect(migration.content).toContain("needs: freelane");
     expect(migration.content).toContain("runs-on: ${{ needs.freelane.outputs.test_linux }}");
-    expect(migration.content).toContain("Route test-linux");
+    expect(migration.content).toContain("Route workflow jobs");
+  });
+
+  it("preserves comments and formatting outside required edits", () => {
+    const workflow = [
+      "name: CI",
+      "",
+      "# Keep this workflow documentation.",
+      "on: [pull_request]",
+      "",
+      "permissions:",
+      "  contents: read # least privilege",
+      "",
+      "jobs:",
+      "  test-linux:",
+      "    # Keep the runner rationale.",
+      "    runs-on: blacksmith-2vcpu-ubuntu-2404",
+      "    if: >-",
+      "      github.event_name != 'pull_request' ||",
+      "      github.actor != 'dependabot[bot]'",
+      "    strategy:",
+      "      matrix:",
+      "        app: [web, api]",
+      "    steps:",
+      "      - run: npm test",
+      ""
+    ].join("\n");
+
+    const migration = migrateGitHubActionsWorkflowContent(config, workflow);
+
+    expect(migration.content).toContain("# Keep this workflow documentation.");
+    expect(migration.content).toContain("    # Keep the runner rationale.");
+    expect(migration.content).toContain("    if: >-\n      github.event_name != 'pull_request' ||");
+    expect(migration.content).toContain("        app: [web, api]");
+    expect(migration.content).toContain("  contents: read # least privilege\n  actions: read");
+  });
+
+  it("preserves CRLF line endings", () => {
+    const workflow = "jobs:\r\n  test-linux:\r\n    runs-on: blacksmith-2vcpu-ubuntu-2404\r\n";
+
+    const migration = migrateGitHubActionsWorkflowContent(config, workflow);
+
+    expect(migration.content.replace(/\r\n/g, "")).not.toContain("\n");
+  });
+
+  it("extends flow-style permissions without reformatting", () => {
+    const workflow = "permissions: { contents: read }\njobs:\n  test-linux:\n    runs-on: blacksmith-2vcpu-ubuntu-2404\n";
+
+    const migration = migrateGitHubActionsWorkflowContent(config, workflow);
+
+    expect(migration.content).toContain("permissions: { contents: read, actions: read }");
   });
 
   it("uses explicit job maps during migration", () => {

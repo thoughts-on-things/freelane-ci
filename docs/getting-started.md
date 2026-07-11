@@ -18,8 +18,8 @@ GitHub remains the default fallback. Provider order and fallback policy can both
 be changed in `.freelane.yml`.
 Existing job steps, conditions, matrices, permissions, and dependencies are
 preserved. Dynamic `runs-on` expressions and unknown runner labels are reported
-as skipped. Setup starts each discovered job with a 10-minute estimate; edit
-`estimate_minutes` in `.freelane.yml` to match typical job duration.
+as skipped. Runtime estimates are learned from completed Actions jobs; no
+duration guesses are written to `.freelane.yml`.
 
 Provider order can be explicit:
 
@@ -86,14 +86,15 @@ jobs:
   freelane:
     runs-on: ubuntu-latest
     outputs:
-      test_linux: ${{ steps.test_linux.outputs.label }}
-      test_linux_runs_on: ${{ steps.test_linux.outputs.runs_on }}
+      test_linux: ${{ steps.route.outputs.test_linux }}
     steps:
       - uses: actions/checkout@v7
-      - id: test_linux
+      - id: route
         uses: thoughts-on-things/freelane-ci@v0
         with:
-          job: test-linux
+          jobs: '[{"job":"test-linux","alias":"test_linux"}]'
+          token: ${{ github.token }}
+          repository: ${{ github.repository }}
 
   test:
     needs: freelane
@@ -118,8 +119,14 @@ npx freelane-ci@latest init github-actions
 The CLI automatically uses the JSON runner output when a job resolves to an
 array-style runner.
 
-The action logs the selected job, provider, runner, quota burn, remaining quota,
-and reason. It also writes the same route decision to the GitHub job summary.
+The router reads recent completed job history with the workflow's `actions: read`
+permission. It learns P75 duration by job name or platform, applies observed
+provider usage, and reserves predicted quota across every routed job in one
+plan. A manual `estimate_minutes` remains available as an override. If history
+cannot be read, routing continues with configured state and emits a warning.
+
+The action logs each selected job, provider, runner, quota burn, and reason. It
+also writes the workflow plan to the GitHub job summary.
 
 See [examples/github-actions/freelane-routed.yml](../examples/github-actions/freelane-routed.yml).
 

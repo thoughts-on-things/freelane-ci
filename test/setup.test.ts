@@ -45,6 +45,7 @@ describe("setupGitHubActions", () => {
     expect(config.providers.github.free_minutes_per_month).toBe(3000);
     expect(config.defaults?.fallback?.providers).toEqual(["github"]);
     expect(config.jobs.check).toMatchObject({ os: "linux", arch: "arm64", min_vcpu: 2, providers: ["github", "blacksmith"] });
+    expect(config.jobs.check.estimate_minutes).toBeUndefined();
     expect(resolveFreelane(config, "check").provider).toBe("github");
     expect(config.jobs.windows).toMatchObject({ os: "windows", arch: "x64" });
     expect(readFileSync(join(cwd, ".freelane.yml"), "utf8")).not.toMatch(/[&*]a\d/);
@@ -76,7 +77,7 @@ describe("setupGitHubActions", () => {
 
     expect(Object.keys(config.jobs)).toEqual(["ci-build", "release-build"]);
     expect(config.providers.github.free_minutes_per_month).toBe(0);
-    expect(readFileSync(first, "utf8")).toContain("Route ci-build");
-    expect(readFileSync(second, "utf8")).toContain("Route release-build");
+    expect(readFileSync(first, "utf8")).toContain("ci-build");
+    expect(readFileSync(second, "utf8")).toContain("release-build");
   });
 });

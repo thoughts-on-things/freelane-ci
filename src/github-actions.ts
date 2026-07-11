@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { parse, stringify } from "yaml";
+import { isMap, isScalar, parseDocument } from "yaml";
 import { resolveFreelane } from "./resolve";
 import type { FreelaneConfig } from "./types";
 
@@ -85,6 +85,7 @@ export function generateGitHubActionsWorkflow(
     "",
     "permissions:",
     "  contents: read",
+    "  actions: read",
     "",
     "jobs:",
     "  freelane:",
@@ -94,12 +95,10 @@ export function generateGitHubActionsWorkflow(
   ];
 
   for (const alias of aliases) {
-    lines.push(
-      `      ${alias.alias}: \${{ steps.${alias.alias}.outputs.label }}`,
-      `      ${alias.alias}_runs_on: \${{ steps.${alias.alias}.outputs.runs_on }}`,
-      `      ${alias.alias}_provider: \${{ steps.${alias.alias}.outputs.provider }}`,
-      `      ${alias.alias}_reason: \${{ steps.${alias.alias}.outputs.reason }}`
-    );
+    lines.push(`      ${alias.alias}: \${{ steps.route.outputs.${alias.alias} }}`);
+    if (usesRunnerArray(config, alias.job)) {
+      lines.push(`      ${alias.alias}_runs_on: \${{ steps.route.outputs.${alias.alias}_runs_on }}`);
+    }
   }
 
   lines.push(
@@ -107,17 +106,17 @@ export function generateGitHubActionsWorkflow(
     "      - uses: actions/checkout@v7"
   );
 
-  for (const alias of aliases) {
-    lines.push(
-      `      - id: ${alias.alias}`,
-      `        name: Route ${yamlString(alias.job)}`,
-      `        uses: ${yamlString(uses)}`,
-      "        with:",
-      `          config: ${yamlString(configPath)}`,
-      `          job: ${yamlString(alias.job)}`,
-      "          validate: true"
-    );
-  }
+  lines.push(
+    "      - id: route",
+    "        name: Route workflow jobs",
+    `        uses: ${yamlString(uses)}`,
+    "        with:",
+    `          config: ${yamlString(configPath)}`,
+    `          jobs: ${yamlString(JSON.stringify(aliases))}`,
+    "          token: ${{ github.token }}",
+    "          repository: ${{ github.repository }}",
+    "          validate: true"
+  );
 
   for (const alias of aliases) {
     const runsOn = workflowRunsOn(config, alias.job, alias.alias);
@@ -170,23 +169,26 @@ export function migrateGitHubActionsWorkflowContent(
   raw: string,
   options: Omit<MigrateGitHubActionsOptions, "workflow" | "cwd"> = {}
 ): GitHubActionsMigration {
-  const workflow = parse(raw) as Record<string, unknown>;
+  const document = parseDocument(raw, { keepSourceTokens: true });
+  if (document.errors.length) throw new Error(`invalid workflow YAML: ${document.errors[0]?.message}`);
+  const workflow = document.toJS() as Record<string, unknown>;
   if (!isRecord(workflow.jobs)) throw new Error("workflow must define jobs");
   if (workflow.jobs.freelane && !options.force) {
     throw new Error("workflow already has a freelane job; pass --force to replace it");
   }
 
   const configPath = options.configPath ?? ".freelane.yml";
+  const newline = newlineFor(raw);
   const aliases = githubActionsAliases(config);
   const aliasByJob = new Map(aliases.map((alias) => [alias.job, alias.alias]));
   const jobByAlias = new Map(aliases.map((alias) => [alias.alias, alias.job]));
   const jobByRunner = uniqueRunnerMatches(config, aliases);
-  const jobs = { ...workflow.jobs };
   const routed: MigratedJob[] = [];
   const skipped: SkippedJob[] = [];
   const routedAliases = new Set<string>();
-
-  delete jobs.freelane;
+  const edits: TextEdit[] = [];
+  const jobsNode = document.get("jobs", true);
+  if (!isMap(jobsNode)) throw new Error("workflow jobs must be a mapping");
 
   for (const [workflowJob, freelaneJob] of Object.entries(options.jobMap ?? {})) {
     if (!config.jobs[freelaneJob]) {
@@ -194,7 +196,8 @@ export function migrateGitHubActionsWorkflowContent(
     }
   }
 
-  for (const [workflowJob, job] of Object.entries(jobs)) {
+  for (const [workflowJob, job] of Object.entries(workflow.jobs)) {
+    if (workflowJob === "freelane") continue;
     if (!isRecord(job)) {
       skipped.push({ workflowJob, reason: "job is not an object" });
       continue;
@@ -226,7 +229,36 @@ export function migrateGitHubActionsWorkflowContent(
       continue;
     }
 
-    jobs[workflowJob] = routedJob(job, needs, workflowRunsOn(config, freelaneJob, alias));
+    const jobPair = findMapPair(jobsNode, workflowJob);
+    if (!jobPair || !isMap(jobPair.value)) {
+      skipped.push({ workflowJob, reason: "cannot locate job in YAML source" });
+      continue;
+    }
+    const runsOnPair = findMapPair(jobPair.value, "runs-on");
+    const runsOnRange = sourceRange(runsOnPair?.value);
+    if (!runsOnPair || !runsOnRange) {
+      skipped.push({ workflowJob, reason: "cannot locate runs-on in YAML source" });
+      continue;
+    }
+    edits.push({
+      start: runsOnRange[0],
+      end: runsOnRange[1],
+      text: workflowRunsOn(config, freelaneJob, alias)
+    });
+    const needsPair = findMapPair(jobPair.value, "needs");
+    const needsRange = sourceRange(needsPair?.value);
+    if (needsRange) {
+      edits.push({
+        start: needsRange[0],
+        end: needsRange[1],
+        text: yamlInline(needs)
+      });
+    } else if (sourceRange(runsOnPair.key)) {
+      const keyStart = sourceRange(runsOnPair.key)![0];
+      const start = lineStart(raw, keyStart);
+      const indent = raw.slice(start, keyStart);
+      edits.push({ start, end: start, text: `${indent}needs: freelane${newline}` });
+    }
     routed.push({ workflowJob, freelaneJob, alias, runner });
     routedAliases.add(alias);
   }
@@ -242,60 +274,147 @@ export function migrateGitHubActionsWorkflowContent(
   }
 
   const routedAliasList = aliases.filter((alias) => routedAliases.has(alias.alias));
-  workflow.jobs = {
-    freelane: routerJob(routedAliasList, configPath, options.uses),
-    ...jobs
-  };
+  addPermissionsEdit(document, raw, edits, newline);
+  const router = routerJobYaml(config, routedAliasList, configPath, options.uses, newline);
+  const existingRouter = findMapPair(jobsNode, "freelane");
+  const existingRouterKeyRange = sourceRange(existingRouter?.key);
+  const existingRouterValueRange = sourceRange(existingRouter?.value);
+  if (existingRouterKeyRange && existingRouterValueRange) {
+    const start = lineStart(raw, existingRouterKeyRange[0]);
+    edits.push({ start, end: existingRouterValueRange[2] ?? existingRouterValueRange[1], text: router });
+  } else {
+    const first = jobsNode.items[0];
+    const firstKeyRange = sourceRange(first?.key);
+    if (!firstKeyRange) throw new Error("workflow jobs mapping is empty");
+    const start = lineStart(raw, firstKeyRange[0]);
+    edits.push({ start, end: start, text: `${router}${newline}` });
+  }
 
   return {
     changed: true,
-    content: stringify(workflow, { lineWidth: 0, nullStr: "" }),
+    content: applyTextEdits(raw, edits),
     routed,
     skipped,
     workflow: ""
   };
 }
 
-function routerJob(aliases: WorkflowAlias[], configPath: string, uses = DEFAULT_ACTION_REF): Record<string, unknown> {
-  const outputs: Record<string, string> = {};
-  const steps: Array<Record<string, unknown>> = [{ uses: "actions/checkout@v7" }];
+interface TextEdit { start: number; end: number; text: string }
+type SourceRange = [number, number, number?];
+interface SourcePair { key?: unknown; value?: unknown }
 
+function routerJobYaml(
+  config: FreelaneConfig,
+  aliases: WorkflowAlias[],
+  configPath: string,
+  uses = DEFAULT_ACTION_REF,
+  newline = "\n"
+): string {
+  const lines = [
+    "  freelane:",
+    "    name: Choose runners",
+    "    runs-on: ubuntu-latest",
+    "    outputs:"
+  ];
   for (const alias of aliases) {
-    outputs[alias.alias] = `\${{ steps.${alias.alias}.outputs.label }}`;
-    outputs[`${alias.alias}_runs_on`] = `\${{ steps.${alias.alias}.outputs.runs_on }}`;
-    outputs[`${alias.alias}_provider`] = `\${{ steps.${alias.alias}.outputs.provider }}`;
-    outputs[`${alias.alias}_reason`] = `\${{ steps.${alias.alias}.outputs.reason }}`;
-    steps.push({
-      id: alias.alias,
-      name: `Route ${alias.job}`,
-      uses,
-      with: {
-        config: configPath,
-        job: alias.job,
-        validate: true
-      }
-    });
+    lines.push(`      ${alias.alias}: \${{ steps.route.outputs.${alias.alias} }}`);
+    if (usesRunnerArray(config, alias.job)) {
+      lines.push(`      ${alias.alias}_runs_on: \${{ steps.route.outputs.${alias.alias}_runs_on }}`);
+    }
   }
-
-  return {
-    name: "Choose runners",
-    "runs-on": "ubuntu-latest",
-    outputs,
-    steps
-  };
+  lines.push(
+    "    steps:",
+    "      - uses: actions/checkout@v7",
+    "      - id: route",
+    "        name: Route workflow jobs",
+    `        uses: ${yamlString(uses)}`,
+    "        with:",
+    `          config: ${yamlString(configPath)}`,
+    `          jobs: ${yamlString(JSON.stringify(aliases))}`,
+    "          token: ${{ github.token }}",
+    "          repository: ${{ github.repository }}",
+    "          validate: true",
+    ""
+  );
+  return lines.join(newline);
 }
 
-function routedJob(job: Record<string, unknown>, needs: string | string[], runsOn: string): Record<string, unknown> {
-  const next: Record<string, unknown> = {};
-  if (job.name !== undefined) next.name = job.name;
-  next.needs = needs;
-  next["runs-on"] = runsOn;
+function findMapPair(map: { items: unknown[] }, key: string): SourcePair | undefined {
+  return map.items.find((item) => {
+    const pair = item as SourcePair;
+    return isScalar(pair.key) && String(pair.key.value) === key;
+  }) as SourcePair | undefined;
+}
 
-  for (const [key, value] of Object.entries(job)) {
-    if (key !== "name" && key !== "needs" && key !== "runs-on") next[key] = value;
+function sourceRange(value: unknown): SourceRange | undefined {
+  if (!value || typeof value !== "object" || !("range" in value)) return undefined;
+  return (value as { range?: SourceRange }).range;
+}
+
+function addPermissionsEdit(
+  document: ReturnType<typeof parseDocument>,
+  raw: string,
+  edits: TextEdit[],
+  newline: string
+): void {
+  const permissions = document.get("permissions", true);
+  if (isMap(permissions)) {
+    if (findMapPair(permissions, "actions")) return;
+    if (permissions.flow) {
+      const range = sourceRange(permissions);
+      if (!range) return;
+      const close = raw.lastIndexOf("}", range[1]);
+      let insert = close;
+      while (insert > range[0] && /\s/.test(raw[insert - 1]!)) insert -= 1;
+      if (close >= range[0]) edits.push({ start: insert, end: insert, text: `${permissions.items.length ? ", " : ""}actions: read` });
+      return;
+    }
+    const last = permissions.items.at(-1);
+    const valueRange = sourceRange(last?.value);
+    const keyRange = sourceRange(last?.key);
+    if (!valueRange || !keyRange) return;
+    const end = valueRange[2] ?? valueRange[1];
+    const start = lineStart(raw, keyRange[0]);
+    const indent = raw.slice(start, keyRange[0]);
+    edits.push({ start: end, end, text: `${indent}actions: read${newline}` });
+    return;
   }
+  if (permissions !== undefined) return;
+  const root = document.contents;
+  if (!isMap(root)) return;
+  const jobsPair = findMapPair(root, "jobs");
+  const jobsKeyRange = sourceRange(jobsPair?.key);
+  if (!jobsKeyRange) return;
+  const start = lineStart(raw, jobsKeyRange[0]);
+  edits.push({
+    start,
+    end: start,
+    text: `permissions:${newline}  contents: read${newline}  actions: read${newline}${newline}`
+  });
+}
 
-  return next;
+function applyTextEdits(raw: string, edits: TextEdit[]): string {
+  const sorted = [...edits].sort((left, right) => right.start - left.start || right.end - left.end);
+  let output = raw;
+  let boundary = raw.length + 1;
+  for (const edit of sorted) {
+    if (edit.end > boundary) throw new Error("overlapping workflow edits");
+    output = output.slice(0, edit.start) + edit.text + output.slice(edit.end);
+    boundary = edit.start;
+  }
+  return output;
+}
+
+function lineStart(raw: string, offset: number): number {
+  return raw.lastIndexOf("\n", offset - 1) + 1;
+}
+
+function newlineFor(raw: string): string {
+  return raw.includes("\r\n") ? "\r\n" : "\n";
+}
+
+function yamlInline(value: string | string[]): string {
+  return typeof value === "string" ? yamlString(value) : JSON.stringify(value);
 }
 
 function matchFreelaneJob(
@@ -342,15 +461,17 @@ function addNeed(existing: unknown, required: string): string | string[] {
 }
 
 function workflowRunsOn(config: FreelaneConfig, job: string, alias: string): string {
-  const jobConfig = config.jobs[job];
-  const providerIds = jobConfig.providers ?? Object.keys(config.providers);
-  const mayUseRunnerArray = Array.isArray(jobConfig.runner)
-    || providerIds.some((provider) => Array.isArray(config.providers[provider]?.runner));
-
-  if (mayUseRunnerArray) {
+  if (usesRunnerArray(config, job)) {
     return `\${{ fromJSON(needs.freelane.outputs.${alias}_runs_on) }}`;
   }
   return `\${{ needs.freelane.outputs.${alias} }}`;
+}
+
+function usesRunnerArray(config: FreelaneConfig, job: string): boolean {
+  const jobConfig = config.jobs[job];
+  const providerIds = jobConfig.providers ?? Object.keys(config.providers);
+  return Array.isArray(jobConfig.runner)
+    || providerIds.some((provider) => Array.isArray(config.providers[provider]?.runner));
 }
 
 export function sanitizeOutputName(value: string): string {
