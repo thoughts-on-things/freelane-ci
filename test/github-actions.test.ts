@@ -34,6 +34,7 @@ describe("github actions workflow generation", () => {
   it("creates stable GitHub output aliases", () => {
     expect(sanitizeOutputName("test-linux")).toBe("test_linux");
     expect(sanitizeOutputName("1 windows")).toBe("job_1_windows");
+    expect(sanitizeOutputName(`test${"_".repeat(10000)}linux`)).toBe("test_linux");
     expect(githubActionsAliases(config)).toEqual([
       { job: "test-linux", alias: "test_linux" },
       { job: "rust/windows", alias: "rust_windows" }

@@ -695,7 +695,7 @@ function workflowRunsOn(config, job, alias) {
   return `\${{ needs.freelane.outputs.${alias} }}`;
 }
 function sanitizeOutputName(value) {
-  const sanitized = value.toLowerCase().replace(/[^a-z0-9_]+/g, "_").replace(/^_+|_+$/g, "").replace(/_+/g, "_");
+  const sanitized = value.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_/, "").replace(/_$/, "");
   const fallback = sanitized || "job";
   return /^[0-9]/.test(fallback) ? `job_${fallback}` : fallback;
 }
