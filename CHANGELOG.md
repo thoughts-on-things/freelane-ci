@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.4.0](https://github.com/thoughts-on-things/freelane-ci/compare/v0.3.0...v0.4.0) (2026-07-11)
+
+
+### Features
+
+* **cli:** add provider-aware workflow onboarding ([#14](https://github.com/thoughts-on-things/freelane-ci/issues/14)) ([4d32185](https://github.com/thoughts-on-things/freelane-ci/commit/4d32185fdf939c9082180ac846fca66b74487eb1))
+* **cli:** migrate github actions workflows ([dcccb32](https://github.com/thoughts-on-things/freelane-ci/commit/dcccb3284e440d02b4b10e1b8ced5cd896bf0fbc))
+
+
+### Bug Fixes
+
+* **cli:** handle multi-label workflow runners ([#13](https://github.com/thoughts-on-things/freelane-ci/issues/13)) ([1b1badb](https://github.com/thoughts-on-things/freelane-ci/commit/1b1badb34b14ef4d38beeb0ad6542d9907bd683d))
+
+
+### Documentation
+
+* remove internal planning artifacts ([d472a95](https://github.com/thoughts-on-things/freelane-ci/commit/d472a952fbb0bdf9210f916fbc26826a02402f58))
+
 ## [0.3.0](https://github.com/thoughts-on-things/freelane-ci/compare/v0.2.1...v0.3.0) (2026-07-09)
 
 
