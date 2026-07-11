@@ -27,7 +27,7 @@ jobs:
     arch: x64
     min_vcpu: 2
     estimate_minutes: 8
-    providers: [blacksmith, github]
+    providers: [github, blacksmith]
 ```
 
 ## Defaults

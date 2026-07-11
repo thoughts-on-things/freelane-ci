@@ -1,6 +1,41 @@
 # Getting Started
 
-## Create A Config
+## Set Up An Existing Repository
+
+Install the Blacksmith GitHub integration for your organization at
+[app.blacksmith.sh](https://app.blacksmith.sh), then run:
+
+```bash
+npx freelane-ci@latest setup github-actions \
+  --workflow .github/workflows/ci.yml \
+  --workflow .github/workflows/launcher-ci.yml
+```
+
+The command discovers literal GitHub and Blacksmith runner labels, writes
+`.freelane.yml`, and migrates every listed workflow. Configured GitHub credits
+are used first, followed by Blacksmith's 3,000 normalized free minutes;
+GitHub remains the default fallback. Provider order and fallback policy can both
+be changed in `.freelane.yml`.
+Existing job steps, conditions, matrices, permissions, and dependencies are
+preserved. Dynamic `runs-on` expressions and unknown runner labels are reported
+as skipped. Setup starts each discovered job with a 10-minute estimate; edit
+`estimate_minutes` in `.freelane.yml` to match typical job duration.
+
+Provider order can be explicit:
+
+```bash
+npx freelane-ci@latest setup github-actions --workflow .github/workflows/ci.yml \
+  --provider github --provider blacksmith --github-plan team
+```
+
+Use `--provider github` for a GitHub-only config. Setup will not replace an
+existing config unless `--force` is supplied; use `migrate github-actions` when
+the repository is already configured. GitHub's included minutes vary by private
+repository plan, so setup defaults them to zero. Use `--github-plan` with
+`public`, `free`, `pro`, `team`, or `enterprise`, or pass an exact allowance
+with `--github-minutes`.
+
+## Create A Config For A New Repository
 
 ```bash
 npx freelane-ci@latest init

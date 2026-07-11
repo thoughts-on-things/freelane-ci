@@ -109,14 +109,22 @@ function option(
   quotaUnit: QuotaUnit
 ): RunnerOption {
   const minutes = job.estimate_minutes ?? 10;
-  const quotaBurn = quotaUnit === "unlimited" ? 0 : quotaUnit === "usd" ? minutes * (unitPriceUsd ?? 0) : unitBurn(provider, job.os, vcpu, minutes);
+  const quotaBurn = quotaUnit === "unlimited" ? 0 : quotaUnit === "usd" ? minutes * (unitPriceUsd ?? 0) : unitBurn(provider, job.os, job.arch ?? "x64", vcpu, minutes);
   return { provider, runner, vcpu, unitPriceUsd, quotaBurn, quotaUnit };
 }
 
-function unitBurn(provider: string, os: RunnerOs, vcpu: number, minutes: number): number {
+function unitBurn(provider: string, os: RunnerOs, arch: string, vcpu: number, minutes: number): number {
   if (provider === "namespace") return vcpu * minutes * platformMultiplier(os);
-  if (provider === "github" || provider === "blacksmith") return Math.max(1, vcpu / 2) * minutes * platformMultiplier(os);
+  if (provider === "blacksmith") return Math.max(1, vcpu / 2) * minutes * blacksmithMultiplier(os, arch);
+  if (provider === "github") return Math.max(1, vcpu / 2) * minutes * platformMultiplier(os);
   return minutes;
+}
+
+function blacksmithMultiplier(os: RunnerOs, arch: string): number {
+  if (os === "windows") return 2;
+  if (os === "macos") return 20 / 3;
+  if (arch === "arm64") return 0.625;
+  return 1;
 }
 
 function platformMultiplier(os: RunnerOs): number {

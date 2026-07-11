@@ -114,6 +114,19 @@ describe("resolveFreelane", () => {
     expect(decision.runner).toBe("nscloud-macos-sequoia-arm64-6x14");
   });
 
+  it("uses Blacksmith normalized free-minute rates", () => {
+    const jobs: FreelaneConfig["jobs"] = {
+      arm: { os: "linux", arch: "arm64", min_vcpu: 2, estimate_minutes: 10, providers: ["blacksmith"] },
+      windows: { os: "windows", arch: "x64", min_vcpu: 2, estimate_minutes: 10, providers: ["blacksmith"] },
+      macos: { os: "macos", arch: "arm64", min_vcpu: 6, estimate_minutes: 10, providers: ["blacksmith"] }
+    };
+    const config: FreelaneConfig = { ...baseConfig, jobs };
+
+    expect(resolveFreelane(config, "arm").quotaBurn).toBe(6.25);
+    expect(resolveFreelane(config, "windows").quotaBurn).toBe(20);
+    expect(resolveFreelane(config, "macos").quotaBurn).toBe(200);
+  });
+
   it("honors job-level runner overrides", () => {
     const config: FreelaneConfig = {
       ...baseConfig,

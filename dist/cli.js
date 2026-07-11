@@ -197,13 +197,20 @@ function namespaceRunner(provider, job) {
 }
 function option(provider, runner, vcpu, unitPriceUsd, job, quotaUnit) {
   const minutes = job.estimate_minutes ?? 10;
-  const quotaBurn = quotaUnit === "unlimited" ? 0 : quotaUnit === "usd" ? minutes * (unitPriceUsd ?? 0) : unitBurn(provider, job.os, vcpu, minutes);
+  const quotaBurn = quotaUnit === "unlimited" ? 0 : quotaUnit === "usd" ? minutes * (unitPriceUsd ?? 0) : unitBurn(provider, job.os, job.arch ?? "x64", vcpu, minutes);
   return { provider, runner, vcpu, unitPriceUsd, quotaBurn, quotaUnit };
 }
-function unitBurn(provider, os, vcpu, minutes) {
+function unitBurn(provider, os, arch, vcpu, minutes) {
   if (provider === "namespace") return vcpu * minutes * platformMultiplier(os);
-  if (provider === "github" || provider === "blacksmith") return Math.max(1, vcpu / 2) * minutes * platformMultiplier(os);
+  if (provider === "blacksmith") return Math.max(1, vcpu / 2) * minutes * blacksmithMultiplier(os, arch);
+  if (provider === "github") return Math.max(1, vcpu / 2) * minutes * platformMultiplier(os);
   return minutes;
+}
+function blacksmithMultiplier(os, arch) {
+  if (os === "windows") return 2;
+  if (os === "macos") return 20 / 3;
+  if (arch === "arm64") return 0.625;
+  return 1;
 }
 function platformMultiplier(os) {
   if (os === "windows") return 2;
@@ -636,7 +643,7 @@ function workflowRunsOn(config, job, alias) {
   return `\${{ needs.freelane.outputs.${alias} }}`;
 }
 function sanitizeOutputName(value) {
-  const sanitized = value.toLowerCase().replace(/[^a-z0-9_]+/g, "_").replace(/^_+|_+$/g, "").replace(/_+/g, "_");
+  const sanitized = value.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_/, "").replace(/_$/, "");
   const fallback = sanitized || "job";
   return /^[0-9]/.test(fallback) ? `job_${fallback}` : fallback;
 }
@@ -740,10 +747,20 @@ function providerTotals(jobs) {
   for (const job of jobs) {
     const total = totals[job.provider] ?? { jobs: 0, minutes: 0 };
     total.jobs += 1;
-    total.minutes = roundQuota(total.minutes + job.durationMinutes);
+    total.minutes = roundQuota(total.minutes + quotaMinutes(job));
     totals[job.provider] = total;
   }
   return totals;
+}
+function quotaMinutes(job) {
+  if (job.provider !== "blacksmith") return job.durationMinutes;
+  const label = job.labels.find((value) => value.startsWith("blacksmith-"));
+  const match = label && /^blacksmith-(\d+)vcpu-(ubuntu-[^-]+(?:-arm)?|windows-|macos-)/.exec(label);
+  if (!match) return job.durationMinutes;
+  const vcpuRatio = Math.max(1, Number(match[1]) / 2);
+  const platform = match[2];
+  const priceRatio = platform.endsWith("-arm") ? 0.625 : platform.startsWith("windows-") ? 2 : platform.startsWith("macos-") ? 20 / 3 : 1;
+  return roundQuota(job.durationMinutes * vcpuRatio * priceRatio);
 }
 async function listRuns(options) {
   const runs = [];
@@ -844,7 +861,7 @@ function starterConfig() {
     "    arch: x64",
     "    min_vcpu: 2",
     "    estimate_minutes: 8",
-    "    providers: [blacksmith, ubicloud, warpbuild, github]",
+    "    providers: [github, blacksmith, ubicloud, warpbuild]",
     ""
   ].join("\n");
 }
@@ -1221,6 +1238,140 @@ function isRecord3(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+// src/setup.ts
+var import_node_fs6 = require("fs");
+var import_node_path5 = require("path");
+var import_yaml4 = require("yaml");
+var SUPPORTED_PROVIDERS = ["github", "blacksmith"];
+function setupGitHubActions(options) {
+  if (options.workflows.length === 0) throw new Error("at least one --workflow is required");
+  if (options.githubMinutes !== void 0 && options.githubPlan !== void 0) {
+    throw new Error("use either --github-plan or --github-minutes, not both");
+  }
+  const cwd = options.cwd ?? process.cwd();
+  const configPath = (0, import_node_path5.resolve)(cwd, options.configPath ?? ".freelane.yml");
+  if ((0, import_node_fs6.existsSync)(configPath) && !options.force) {
+    throw new Error(`${configPath} already exists; use migrate for an existing config or pass --force to replace it`);
+  }
+  const providers2 = normalizeProviders(options.providers);
+  const discovered = options.workflows.map((workflow) => discoverWorkflow((0, import_node_path5.resolve)(cwd, workflow)));
+  const config = buildDiscoveredConfig(discovered, providers2, githubMinutesFor(options));
+  const migrations = discovered.map((workflow) => {
+    const jobMap = Object.fromEntries(workflow.jobs.map((job) => [job.id, configKey(workflow.path, job.id, discovered)]));
+    const migration = migrateGitHubActionsWorkflowContent(config, workflow.raw, {
+      configPath: relativeConfigPath(cwd, configPath),
+      force: options.force,
+      jobMap,
+      uses: options.uses
+    });
+    return { workflow, migration };
+  });
+  if (migrations.every(({ migration }) => !migration.changed)) {
+    throw new Error("no routable jobs found; setup supports literal GitHub or Blacksmith runs-on labels");
+  }
+  (0, import_node_fs6.mkdirSync)((0, import_node_path5.dirname)(configPath), { recursive: true });
+  (0, import_node_fs6.writeFileSync)(configPath, (0, import_yaml4.stringify)({ $schema: CONFIG_SCHEMA_URL, ...config }, { lineWidth: 0 }), "utf8");
+  for (const { workflow, migration } of migrations) {
+    if (migration.changed) (0, import_node_fs6.writeFileSync)(workflow.path, migration.content, "utf8");
+  }
+  return {
+    config: configPath,
+    jobs: Object.keys(config.jobs).length,
+    skipped: discovered.flatMap((workflow) => workflow.skipped.map((job) => ({ ...job, workflow: workflow.path }))),
+    workflows: migrations.map(({ workflow, migration }) => ({ path: workflow.path, routed: migration.routed.length }))
+  };
+}
+function discoverWorkflow(path) {
+  const raw = (0, import_node_fs6.readFileSync)(path, "utf8");
+  const workflow = (0, import_yaml4.parse)(raw);
+  if (!isRecord4(workflow.jobs)) throw new Error(`${path} must define jobs`);
+  const jobs = [];
+  const skipped = [];
+  for (const [id, value] of Object.entries(workflow.jobs)) {
+    if (id === "freelane") continue;
+    if (!isRecord4(value) || typeof value["runs-on"] !== "string") {
+      skipped.push({ workflowJob: id, reason: "runs-on is not a literal string" });
+      continue;
+    }
+    const config = jobConfigFromRunner(value["runs-on"]);
+    if (!config) {
+      skipped.push({ workflowJob: id, reason: `unsupported runner: ${value["runs-on"]}` });
+      continue;
+    }
+    jobs.push({ id, config });
+  }
+  return { path, raw, jobs, skipped };
+}
+function buildDiscoveredConfig(workflows, providerIds, githubMinutes) {
+  const providers2 = {};
+  for (const provider of providerIds) {
+    providers2[provider] = provider === "blacksmith" ? { enabled: true, free_minutes_per_month: 3e3 } : githubMinutes === void 0 ? { enabled: true } : { enabled: true, free_minutes_per_month: githubMinutes };
+  }
+  const jobs = {};
+  for (const workflow of workflows) {
+    for (const job of workflow.jobs) {
+      const key = configKey(workflow.path, job.id, workflows);
+      jobs[key] = { ...job.config, providers: [...providerIds] };
+    }
+  }
+  return {
+    version: 1,
+    defaults: {
+      paid: "avoid",
+      fallback: { mode: "pre_schedule", providers: paidFallbackProviders(providerIds) }
+    },
+    providers: providers2,
+    jobs
+  };
+}
+function githubMinutesFor(options) {
+  if (options.githubMinutes !== void 0) return options.githubMinutes;
+  if (options.githubPlan === "public") return void 0;
+  if (options.githubPlan === "free") return 2e3;
+  if (options.githubPlan === "pro" || options.githubPlan === "team") return 3e3;
+  if (options.githubPlan === "enterprise") return 5e4;
+  return 0;
+}
+function paidFallbackProviders(providerIds) {
+  return providerIds.includes("github") ? ["github"] : providerIds;
+}
+function configKey(path, id, workflows) {
+  const duplicates = workflows.filter((workflow) => workflow.jobs.some((job) => job.id === id));
+  if (duplicates.length <= 1) return id;
+  const stem = (0, import_node_path5.basename)(path, (0, import_node_path5.extname)(path));
+  return `${sanitizeOutputName(stem)}-${id}`;
+}
+function jobConfigFromRunner(runner) {
+  const blacksmith = /^blacksmith-(\d+)vcpu-(ubuntu-(?:2204|2404)(-arm)?|windows-2025|macos-(?:latest|\d+))$/.exec(runner);
+  if (blacksmith) {
+    const platform = blacksmith[2];
+    return {
+      os: platform.startsWith("ubuntu") ? "linux" : platform.startsWith("windows") ? "windows" : "macos",
+      arch: platform.endsWith("-arm") || platform.startsWith("macos") ? "arm64" : "x64",
+      min_vcpu: Number(blacksmith[1]),
+      estimate_minutes: 10
+    };
+  }
+  const github = /^(ubuntu|windows|macos)-(?:latest|\d+(?:\.\d+)?)(-arm)?$/.exec(runner);
+  if (!github) return void 0;
+  const os = github[1] === "ubuntu" ? "linux" : github[1];
+  const arch = github[2] || os === "macos" ? "arm64" : "x64";
+  return { os, arch, min_vcpu: 2, estimate_minutes: 10 };
+}
+function normalizeProviders(values) {
+  const providers2 = values?.length ? [...new Set(values.flatMap((value) => value.split(",")).filter(Boolean))] : [...SUPPORTED_PROVIDERS];
+  if (providers2.length === 0) throw new Error("at least one provider is required");
+  const unsupported = providers2.filter((provider) => !SUPPORTED_PROVIDERS.includes(provider));
+  if (unsupported.length) throw new Error(`setup currently supports providers: ${SUPPORTED_PROVIDERS.join(", ")}; unsupported: ${unsupported.join(", ")}`);
+  return providers2;
+}
+function relativeConfigPath(cwd, configPath) {
+  return (0, import_node_path5.relative)(cwd, configPath).replace(/\\/g, "/");
+}
+function isRecord4(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 // src/usage.ts
 function usageReport(config) {
   const entries = Object.entries(config.providers).map(([providerId, provider]) => {
@@ -1265,11 +1416,11 @@ function formatAmount2(value, unit) {
 }
 
 // src/usage-state.ts
-var import_node_fs6 = require("fs");
-var import_node_path5 = require("path");
+var import_node_fs7 = require("fs");
+var import_node_path6 = require("path");
 var DEFAULT_USAGE_STATE = ".freelane-usage.json";
 function loadUsageState(path = DEFAULT_USAGE_STATE) {
-  const parsed = JSON.parse((0, import_node_fs6.readFileSync)(path, "utf8"));
+  const parsed = JSON.parse((0, import_node_fs7.readFileSync)(path, "utf8"));
   if (parsed.source !== "github-actions" || !parsed.providers) {
     throw new Error(`${path}: unsupported usage state`);
   }
@@ -1286,8 +1437,8 @@ function applyUsageState(config, state) {
 }
 function applyUsageStateIfPresent(config, options = {}) {
   if (options.disabled) return config;
-  const path = (0, import_node_path5.resolve)(options.path ?? DEFAULT_USAGE_STATE);
-  if (!options.path && !(0, import_node_fs6.existsSync)(path)) return config;
+  const path = (0, import_node_path6.resolve)(options.path ?? DEFAULT_USAGE_STATE);
+  if (!options.path && !(0, import_node_fs7.existsSync)(path)) return config;
   return applyUsageState(config, loadUsageState(path));
 }
 function copyConfig2(config) {
@@ -1306,6 +1457,33 @@ function copyConfig2(config) {
 // src/cli.ts
 async function main() {
   const args = parseArgs(process.argv.slice(2));
+  if (args.command === "setup" && args.subcommand === "github-actions") {
+    const result = setupGitHubActions({
+      configPath: args.config,
+      force: args.force,
+      githubMinutes: args.githubMinutes,
+      githubPlan: args.githubPlan,
+      providers: args.providers,
+      uses: args.uses,
+      workflows: args.workflows
+    });
+    process.stdout.write(`created ${result.config}; configured ${result.jobs} jobs
+`);
+    for (const workflow of result.workflows) {
+      process.stdout.write(`updated ${workflow.path}; routed ${workflow.routed} jobs
+`);
+    }
+    if (result.skipped.length) process.stdout.write(`skipped ${result.skipped.length} unsupported jobs
+`);
+    const selectedProviders = args.providers.length ? args.providers.flatMap((provider) => provider.split(",")) : ["github", "blacksmith"];
+    if (selectedProviders.includes("github") && args.githubMinutes === void 0 && args.githubPlan === void 0) {
+      process.stdout.write("note: GitHub credits defaulted to 0; use --github-plan or set providers.github.free_minutes_per_month\n");
+    }
+    if (selectedProviders.includes("blacksmith")) {
+      process.stdout.write("next: authorize the GitHub organization at https://app.blacksmith.sh\n");
+    }
+    return;
+  }
   if (args.command === "resolve") {
     if (!args.job) throw new Error("missing required --job");
     const config = loadConfigForRouting(args);
@@ -1390,7 +1568,7 @@ async function main() {
   usage(0);
 }
 function parseArgs(argv) {
-  const args = { command: argv[0], format: "text", jobMap: {} };
+  const args = { command: argv[0], format: "text", jobMap: {}, providers: [], workflows: [] };
   let start = 1;
   if (args.command === "providers" || args.command === "config" || args.command === "usage") {
     args.subcommand = argv[1];
@@ -1398,7 +1576,7 @@ function parseArgs(argv) {
   } else if (args.command === "init" && argv[1] === "github-actions") {
     args.subcommand = argv[1];
     start = 2;
-  } else if (args.command === "migrate" && argv[1] === "github-actions") {
+  } else if ((args.command === "migrate" || args.command === "setup") && argv[1] === "github-actions") {
     args.subcommand = argv[1];
     start = 2;
   }
@@ -1409,17 +1587,22 @@ function parseArgs(argv) {
     else if (value === "--days") args.days = parsePositiveInt(argv[++i], "--days");
     else if (value === "--dry-run") args.dryRun = true;
     else if (value === "--force") args.force = true;
+    else if (value === "--github-minutes") args.githubMinutes = parseNonNegativeNumber(argv[++i], "--github-minutes");
+    else if (value === "--github-plan") args.githubPlan = parseGitHubPlan(argv[++i]);
     else if (value === "--job") args.job = argv[++i];
     else if (value === "--job-map") addJobMap(args.jobMap, argv[++i]);
     else if (value === "--limit") args.limit = parsePositiveInt(argv[++i], "--limit");
     else if (value === "--output") args.output = argv[++i];
+    else if (value === "--provider") args.providers.push(argv[++i]);
     else if (value === "--repo") args.repo = argv[++i];
     else if (value === "--token") args.token = argv[++i];
     else if (value === "--usage-state") args.usageState = argv[++i];
     else if (value === "--no-usage-state") args.noUsageState = true;
     else if (value === "--uses") args.uses = argv[++i];
-    else if (value === "--workflow") args.workflow = argv[++i];
-    else if (value === "--format") args.format = parseFormat(argv[++i]);
+    else if (value === "--workflow") {
+      args.workflow = argv[++i];
+      args.workflows.push(args.workflow);
+    } else if (value === "--format") args.format = parseFormat(argv[++i]);
     else throw new Error(`unknown argument: ${value}`);
   }
   return args;
@@ -1432,6 +1615,15 @@ function parsePositiveInt(value, flag) {
   const parsed = Number(value);
   if (!Number.isInteger(parsed) || parsed <= 0) throw new Error(`${flag} must be a positive integer`);
   return parsed;
+}
+function parseNonNegativeNumber(value, flag) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) throw new Error(`${flag} must be a non-negative number`);
+  return parsed;
+}
+function parseGitHubPlan(value) {
+  if (value === "public" || value === "free" || value === "pro" || value === "team" || value === "enterprise") return value;
+  throw new Error("--github-plan must be public, free, pro, team, or enterprise");
 }
 function addJobMap(map, value) {
   const [workflowJob, freelaneJob, ...extra] = value.split("=");
@@ -1457,6 +1649,7 @@ function usage(code) {
   process.stdout.write([
     "Usage:",
     "  freelane init [--output .freelane.yml] [--force]",
+    "  freelane setup github-actions --workflow .github/workflows/ci.yml [--workflow ...] [--provider github] [--provider blacksmith] [--github-plan team|public] [--github-minutes 3000] [--force]",
     "  freelane init github-actions [--config .freelane.yml] [--output .github/workflows/freelane-ci.yml] [--uses thoughts-on-things/freelane-ci@v0] [--force]",
     "  freelane migrate github-actions --workflow .github/workflows/ci.yml [--config .freelane.yml] [--job-map workflow-job=freelane-job] [--dry-run] [--force]",
     "  freelane config validate [--config .freelane.yml] [--format text|json]",

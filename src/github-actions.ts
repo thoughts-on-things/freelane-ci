@@ -356,9 +356,9 @@ function workflowRunsOn(config: FreelaneConfig, job: string, alias: string): str
 export function sanitizeOutputName(value: string): string {
   const sanitized = value
     .toLowerCase()
-    .replace(/[^a-z0-9_]+/g, "_")
-    .replace(/^_+|_+$/g, "")
-    .replace(/_+/g, "_");
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_/, "")
+    .replace(/_$/, "");
   const fallback = sanitized || "job";
   return /^[0-9]/.test(fallback) ? `job_${fallback}` : fallback;
 }

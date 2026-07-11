@@ -31,6 +31,11 @@ Generated labels include:
 
 Source: [Blacksmith instance types](https://docs.blacksmith.sh/blacksmith-runners/overview)
 
+Blacksmith's 3,000-minute free tier is measured in normalized x64 2-vCPU
+minutes. Freelane applies Blacksmith's documented ratios when planning and when
+syncing usage: ARM is 0.625x and Windows is 2x before vCPU scaling; a 6-vCPU
+macOS minute consumes 20 normalized minutes.
+
 ## Ubicloud
 
 Generated labels include:

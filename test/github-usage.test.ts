@@ -17,9 +17,16 @@ describe("collectGitHubUsage", () => {
             name: "test-linux",
             workflow_name: "ci",
             conclusion: "success",
-            labels: ["blacksmith-2vcpu-ubuntu-2404"],
+            labels: ["blacksmith-2vcpu-ubuntu-2404-arm"],
             started_at: "2026-07-08T10:00:00Z",
             completed_at: "2026-07-08T10:08:00Z"
+          }, {
+            id: 103,
+            run_id: 11,
+            name: "test-macos",
+            labels: ["blacksmith-6vcpu-macos-15"],
+            started_at: "2026-07-08T10:00:00Z",
+            completed_at: "2026-07-08T10:10:00Z"
           }]
         });
       }
@@ -47,8 +54,8 @@ describe("collectGitHubUsage", () => {
     });
 
     expect(usage.runCount).toBe(2);
-    expect(usage.jobCount).toBe(2);
-    expect(usage.providers.blacksmith.minutes).toBe(8);
+    expect(usage.jobCount).toBe(3);
+    expect(usage.providers.blacksmith.minutes).toBe(205);
     expect(usage.providers.github.minutes).toBe(3.5);
   });
 });

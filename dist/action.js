@@ -33881,13 +33881,20 @@ function namespaceRunner(provider, job) {
 }
 function option(provider, runner, vcpu, unitPriceUsd, job, quotaUnit) {
   const minutes = job.estimate_minutes ?? 10;
-  const quotaBurn = quotaUnit === "unlimited" ? 0 : quotaUnit === "usd" ? minutes * (unitPriceUsd ?? 0) : unitBurn(provider, job.os, vcpu, minutes);
+  const quotaBurn = quotaUnit === "unlimited" ? 0 : quotaUnit === "usd" ? minutes * (unitPriceUsd ?? 0) : unitBurn(provider, job.os, job.arch ?? "x64", vcpu, minutes);
   return { provider, runner, vcpu, unitPriceUsd, quotaBurn, quotaUnit };
 }
-function unitBurn(provider, os5, vcpu, minutes) {
+function unitBurn(provider, os5, arch2, vcpu, minutes) {
   if (provider === "namespace") return vcpu * minutes * platformMultiplier(os5);
-  if (provider === "github" || provider === "blacksmith") return Math.max(1, vcpu / 2) * minutes * platformMultiplier(os5);
+  if (provider === "blacksmith") return Math.max(1, vcpu / 2) * minutes * blacksmithMultiplier(os5, arch2);
+  if (provider === "github") return Math.max(1, vcpu / 2) * minutes * platformMultiplier(os5);
   return minutes;
+}
+function blacksmithMultiplier(os5, arch2) {
+  if (os5 === "windows") return 2;
+  if (os5 === "macos") return 20 / 3;
+  if (arch2 === "arm64") return 0.625;
+  return 1;
 }
 function platformMultiplier(os5) {
   if (os5 === "windows") return 2;
