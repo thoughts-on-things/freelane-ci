@@ -9,6 +9,7 @@ import { formatPlan, planFreelane } from "./plan";
 import { formatProviderList, listProviders } from "./provider-list";
 import { resolveFreelane } from "./resolve";
 import { formatValidation, validateConfigFile } from "./schema";
+import { setupGitHubActions, type GitHubPlan } from "./setup";
 import { formatUsageReport, usageReport } from "./usage";
 import { applyUsageStateIfPresent } from "./usage-state";
 
@@ -18,6 +19,8 @@ interface Args {
   config?: string;
   days?: number;
   force?: boolean;
+  githubMinutes?: number;
+  githubPlan?: GitHubPlan;
   job?: string;
   limit?: number;
   output?: string;
@@ -30,10 +33,39 @@ interface Args {
   format: "text" | "json" | "github-output";
   jobMap: Record<string, string>;
   workflow?: string;
+  workflows: string[];
+  providers: string[];
 }
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
+
+  if (args.command === "setup" && args.subcommand === "github-actions") {
+    const result = setupGitHubActions({
+      configPath: args.config,
+      force: args.force,
+      githubMinutes: args.githubMinutes,
+      githubPlan: args.githubPlan,
+      providers: args.providers,
+      uses: args.uses,
+      workflows: args.workflows
+    });
+    process.stdout.write(`created ${result.config}; configured ${result.jobs} jobs\n`);
+    for (const workflow of result.workflows) {
+      process.stdout.write(`updated ${workflow.path}; routed ${workflow.routed} jobs\n`);
+    }
+    if (result.skipped.length) process.stdout.write(`skipped ${result.skipped.length} unsupported jobs\n`);
+    const selectedProviders = args.providers.length
+      ? args.providers.flatMap((provider) => provider.split(","))
+      : ["github", "blacksmith"];
+    if (selectedProviders.includes("github") && args.githubMinutes === undefined && args.githubPlan === undefined) {
+      process.stdout.write("note: GitHub credits defaulted to 0; use --github-plan or set providers.github.free_minutes_per_month\n");
+    }
+    if (selectedProviders.includes("blacksmith")) {
+      process.stdout.write("next: authorize the GitHub organization at https://app.blacksmith.sh\n");
+    }
+    return;
+  }
 
   if (args.command === "resolve") {
     if (!args.job) throw new Error("missing required --job");
@@ -128,7 +160,7 @@ async function main(): Promise<void> {
 }
 
 function parseArgs(argv: string[]): Args {
-  const args: Args = { command: argv[0], format: "text", jobMap: {} };
+  const args: Args = { command: argv[0], format: "text", jobMap: {}, providers: [], workflows: [] };
   let start = 1;
   if (args.command === "providers" || args.command === "config" || args.command === "usage") {
     args.subcommand = argv[1];
@@ -136,7 +168,7 @@ function parseArgs(argv: string[]): Args {
   } else if (args.command === "init" && argv[1] === "github-actions") {
     args.subcommand = argv[1];
     start = 2;
-  } else if (args.command === "migrate" && argv[1] === "github-actions") {
+  } else if ((args.command === "migrate" || args.command === "setup") && argv[1] === "github-actions") {
     args.subcommand = argv[1];
     start = 2;
   }
@@ -148,16 +180,22 @@ function parseArgs(argv: string[]): Args {
     else if (value === "--days") args.days = parsePositiveInt(argv[++i], "--days");
     else if (value === "--dry-run") args.dryRun = true;
     else if (value === "--force") args.force = true;
+    else if (value === "--github-minutes") args.githubMinutes = parseNonNegativeNumber(argv[++i], "--github-minutes");
+    else if (value === "--github-plan") args.githubPlan = parseGitHubPlan(argv[++i]);
     else if (value === "--job") args.job = argv[++i];
     else if (value === "--job-map") addJobMap(args.jobMap, argv[++i]);
     else if (value === "--limit") args.limit = parsePositiveInt(argv[++i], "--limit");
     else if (value === "--output") args.output = argv[++i];
+    else if (value === "--provider") args.providers.push(argv[++i]);
     else if (value === "--repo") args.repo = argv[++i];
     else if (value === "--token") args.token = argv[++i];
     else if (value === "--usage-state") args.usageState = argv[++i];
     else if (value === "--no-usage-state") args.noUsageState = true;
     else if (value === "--uses") args.uses = argv[++i];
-    else if (value === "--workflow") args.workflow = argv[++i];
+    else if (value === "--workflow") {
+      args.workflow = argv[++i];
+      args.workflows.push(args.workflow);
+    }
     else if (value === "--format") args.format = parseFormat(argv[++i]);
     else throw new Error(`unknown argument: ${value}`);
   }
@@ -173,6 +211,17 @@ function parsePositiveInt(value: string, flag: string): number {
   const parsed = Number(value);
   if (!Number.isInteger(parsed) || parsed <= 0) throw new Error(`${flag} must be a positive integer`);
   return parsed;
+}
+
+function parseNonNegativeNumber(value: string, flag: string): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) throw new Error(`${flag} must be a non-negative number`);
+  return parsed;
+}
+
+function parseGitHubPlan(value: string): GitHubPlan {
+  if (value === "public" || value === "free" || value === "pro" || value === "team" || value === "enterprise") return value;
+  throw new Error("--github-plan must be public, free, pro, team, or enterprise");
 }
 
 function addJobMap(map: Record<string, string>, value: string): void {
@@ -200,6 +249,7 @@ function usage(code: number): never {
   process.stdout.write([
     "Usage:",
     "  freelane init [--output .freelane.yml] [--force]",
+    "  freelane setup github-actions --workflow .github/workflows/ci.yml [--workflow ...] [--provider github] [--provider blacksmith] [--github-plan team|public] [--github-minutes 3000] [--force]",
     "  freelane init github-actions [--config .freelane.yml] [--output .github/workflows/freelane-ci.yml] [--uses thoughts-on-things/freelane-ci@v0] [--force]",
     "  freelane migrate github-actions --workflow .github/workflows/ci.yml [--config .freelane.yml] [--job-map workflow-job=freelane-job] [--dry-run] [--force]",
     "  freelane config validate [--config .freelane.yml] [--format text|json]",

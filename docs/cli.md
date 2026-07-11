@@ -12,9 +12,17 @@ npx freelane-ci@latest --help
 npx freelane-ci@latest init
 npx freelane-ci@latest config validate
 npx freelane-ci@latest plan
+npx freelane-ci@latest setup github-actions --workflow .github/workflows/ci.yml
 npx freelane-ci@latest migrate github-actions --workflow .github/workflows/ci.yml
 npx freelane-ci@latest init github-actions
 ```
+
+`setup github-actions` is the one-command path for an existing repository that
+does not have `.freelane.yml` yet. Repeat `--workflow` to migrate several files.
+It discovers jobs, creates a GitHub-credits-first config with Blacksmith next,
+and updates the workflows. Repeat `--provider` to set provider order explicitly.
+Use `--github-plan public|free|pro|team|enterprise` for normal onboarding, or
+`--github-minutes N` to record a custom included allowance.
 
 `migrate github-actions` updates an existing workflow. It adds one `freelane`
 router job, keeps the existing job steps, and changes matched `runs-on` values

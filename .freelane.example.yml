@@ -23,4 +23,4 @@ jobs:
     arch: x64
     min_vcpu: 2
     estimate_minutes: 8
-    providers: [blacksmith, ubicloud, github]
+    providers: [github, blacksmith, ubicloud]

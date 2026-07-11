@@ -62,6 +62,7 @@ __export(index_exports, {
   resolveFreelane: () => resolveFreelane,
   roundQuota: () => roundQuota,
   sanitizeOutputName: () => sanitizeOutputName,
+  setupGitHubActions: () => setupGitHubActions,
   starterConfig: () => starterConfig,
   usageReport: () => usageReport,
   validateConfigFile: () => validateConfigFile,
@@ -190,13 +191,20 @@ function namespaceRunner(provider, job) {
 }
 function option(provider, runner, vcpu, unitPriceUsd, job, quotaUnit) {
   const minutes = job.estimate_minutes ?? 10;
-  const quotaBurn = quotaUnit === "unlimited" ? 0 : quotaUnit === "usd" ? minutes * (unitPriceUsd ?? 0) : unitBurn(provider, job.os, vcpu, minutes);
+  const quotaBurn = quotaUnit === "unlimited" ? 0 : quotaUnit === "usd" ? minutes * (unitPriceUsd ?? 0) : unitBurn(provider, job.os, job.arch ?? "x64", vcpu, minutes);
   return { provider, runner, vcpu, unitPriceUsd, quotaBurn, quotaUnit };
 }
-function unitBurn(provider, os, vcpu, minutes) {
+function unitBurn(provider, os, arch, vcpu, minutes) {
   if (provider === "namespace") return vcpu * minutes * platformMultiplier(os);
-  if (provider === "github" || provider === "blacksmith") return Math.max(1, vcpu / 2) * minutes * platformMultiplier(os);
+  if (provider === "blacksmith") return Math.max(1, vcpu / 2) * minutes * blacksmithMultiplier(os, arch);
+  if (provider === "github") return Math.max(1, vcpu / 2) * minutes * platformMultiplier(os);
   return minutes;
+}
+function blacksmithMultiplier(os, arch) {
+  if (os === "windows") return 2;
+  if (os === "macos") return 20 / 3;
+  if (arch === "arm64") return 0.625;
+  return 1;
 }
 function platformMultiplier(os) {
   if (os === "windows") return 2;
@@ -791,10 +799,20 @@ function providerTotals(jobs) {
   for (const job of jobs) {
     const total = totals[job.provider] ?? { jobs: 0, minutes: 0 };
     total.jobs += 1;
-    total.minutes = roundQuota(total.minutes + job.durationMinutes);
+    total.minutes = roundQuota(total.minutes + quotaMinutes(job));
     totals[job.provider] = total;
   }
   return totals;
+}
+function quotaMinutes(job) {
+  if (job.provider !== "blacksmith") return job.durationMinutes;
+  const label = job.labels.find((value) => value.startsWith("blacksmith-"));
+  const match = label && /^blacksmith-(\d+)vcpu-(ubuntu-[^-]+(?:-arm)?|windows-|macos-)/.exec(label);
+  if (!match) return job.durationMinutes;
+  const vcpuRatio = Math.max(1, Number(match[1]) / 2);
+  const platform = match[2];
+  const priceRatio = platform.endsWith("-arm") ? 0.625 : platform.startsWith("windows-") ? 2 : platform.startsWith("macos-") ? 20 / 3 : 1;
+  return roundQuota(job.durationMinutes * vcpuRatio * priceRatio);
 }
 async function listRuns(options) {
   const runs = [];
@@ -890,7 +908,7 @@ function starterConfig() {
     "    arch: x64",
     "    min_vcpu: 2",
     "    estimate_minutes: 8",
-    "    providers: [blacksmith, ubicloud, warpbuild, github]",
+    "    providers: [github, blacksmith, ubicloud, warpbuild]",
     ""
   ].join("\n");
 }
@@ -1014,10 +1032,144 @@ function formatProviderList(items, format) {
   ].join("\n") + "\n";
 }
 
+// src/setup.ts
+var import_node_fs5 = require("fs");
+var import_node_path5 = require("path");
+var import_yaml3 = require("yaml");
+var SUPPORTED_PROVIDERS = ["github", "blacksmith"];
+function setupGitHubActions(options) {
+  if (options.workflows.length === 0) throw new Error("at least one --workflow is required");
+  if (options.githubMinutes !== void 0 && options.githubPlan !== void 0) {
+    throw new Error("use either --github-plan or --github-minutes, not both");
+  }
+  const cwd = options.cwd ?? process.cwd();
+  const configPath = (0, import_node_path5.resolve)(cwd, options.configPath ?? ".freelane.yml");
+  if ((0, import_node_fs5.existsSync)(configPath) && !options.force) {
+    throw new Error(`${configPath} already exists; use migrate for an existing config or pass --force to replace it`);
+  }
+  const providers2 = normalizeProviders(options.providers);
+  const discovered = options.workflows.map((workflow) => discoverWorkflow((0, import_node_path5.resolve)(cwd, workflow)));
+  const config = buildDiscoveredConfig(discovered, providers2, githubMinutesFor(options));
+  const migrations = discovered.map((workflow) => {
+    const jobMap = Object.fromEntries(workflow.jobs.map((job) => [job.id, configKey(workflow.path, job.id, discovered)]));
+    const migration = migrateGitHubActionsWorkflowContent(config, workflow.raw, {
+      configPath: relativeConfigPath(cwd, configPath),
+      force: options.force,
+      jobMap,
+      uses: options.uses
+    });
+    return { workflow, migration };
+  });
+  if (migrations.every(({ migration }) => !migration.changed)) {
+    throw new Error("no routable jobs found; setup supports literal GitHub or Blacksmith runs-on labels");
+  }
+  (0, import_node_fs5.mkdirSync)((0, import_node_path5.dirname)(configPath), { recursive: true });
+  (0, import_node_fs5.writeFileSync)(configPath, (0, import_yaml3.stringify)({ $schema: CONFIG_SCHEMA_URL, ...config }, { lineWidth: 0 }), "utf8");
+  for (const { workflow, migration } of migrations) {
+    if (migration.changed) (0, import_node_fs5.writeFileSync)(workflow.path, migration.content, "utf8");
+  }
+  return {
+    config: configPath,
+    jobs: Object.keys(config.jobs).length,
+    skipped: discovered.flatMap((workflow) => workflow.skipped.map((job) => ({ ...job, workflow: workflow.path }))),
+    workflows: migrations.map(({ workflow, migration }) => ({ path: workflow.path, routed: migration.routed.length }))
+  };
+}
+function discoverWorkflow(path) {
+  const raw = (0, import_node_fs5.readFileSync)(path, "utf8");
+  const workflow = (0, import_yaml3.parse)(raw);
+  if (!isRecord3(workflow.jobs)) throw new Error(`${path} must define jobs`);
+  const jobs = [];
+  const skipped = [];
+  for (const [id, value] of Object.entries(workflow.jobs)) {
+    if (id === "freelane") continue;
+    if (!isRecord3(value) || typeof value["runs-on"] !== "string") {
+      skipped.push({ workflowJob: id, reason: "runs-on is not a literal string" });
+      continue;
+    }
+    const config = jobConfigFromRunner(value["runs-on"]);
+    if (!config) {
+      skipped.push({ workflowJob: id, reason: `unsupported runner: ${value["runs-on"]}` });
+      continue;
+    }
+    jobs.push({ id, config });
+  }
+  return { path, raw, jobs, skipped };
+}
+function buildDiscoveredConfig(workflows, providerIds, githubMinutes) {
+  const providers2 = {};
+  for (const provider of providerIds) {
+    providers2[provider] = provider === "blacksmith" ? { enabled: true, free_minutes_per_month: 3e3 } : githubMinutes === void 0 ? { enabled: true } : { enabled: true, free_minutes_per_month: githubMinutes };
+  }
+  const jobs = {};
+  for (const workflow of workflows) {
+    for (const job of workflow.jobs) {
+      const key = configKey(workflow.path, job.id, workflows);
+      jobs[key] = { ...job.config, providers: [...providerIds] };
+    }
+  }
+  return {
+    version: 1,
+    defaults: {
+      paid: "avoid",
+      fallback: { mode: "pre_schedule", providers: paidFallbackProviders(providerIds) }
+    },
+    providers: providers2,
+    jobs
+  };
+}
+function githubMinutesFor(options) {
+  if (options.githubMinutes !== void 0) return options.githubMinutes;
+  if (options.githubPlan === "public") return void 0;
+  if (options.githubPlan === "free") return 2e3;
+  if (options.githubPlan === "pro" || options.githubPlan === "team") return 3e3;
+  if (options.githubPlan === "enterprise") return 5e4;
+  return 0;
+}
+function paidFallbackProviders(providerIds) {
+  return providerIds.includes("github") ? ["github"] : providerIds;
+}
+function configKey(path, id, workflows) {
+  const duplicates = workflows.filter((workflow) => workflow.jobs.some((job) => job.id === id));
+  if (duplicates.length <= 1) return id;
+  const stem = (0, import_node_path5.basename)(path, (0, import_node_path5.extname)(path));
+  return `${sanitizeOutputName(stem)}-${id}`;
+}
+function jobConfigFromRunner(runner) {
+  const blacksmith = /^blacksmith-(\d+)vcpu-(ubuntu-(?:2204|2404)(-arm)?|windows-2025|macos-(?:latest|\d+))$/.exec(runner);
+  if (blacksmith) {
+    const platform = blacksmith[2];
+    return {
+      os: platform.startsWith("ubuntu") ? "linux" : platform.startsWith("windows") ? "windows" : "macos",
+      arch: platform.endsWith("-arm") || platform.startsWith("macos") ? "arm64" : "x64",
+      min_vcpu: Number(blacksmith[1]),
+      estimate_minutes: 10
+    };
+  }
+  const github = /^(ubuntu|windows|macos)-(?:latest|\d+(?:\.\d+)?)(-arm)?$/.exec(runner);
+  if (!github) return void 0;
+  const os = github[1] === "ubuntu" ? "linux" : github[1];
+  const arch = github[2] || os === "macos" ? "arm64" : "x64";
+  return { os, arch, min_vcpu: 2, estimate_minutes: 10 };
+}
+function normalizeProviders(values) {
+  const providers2 = values?.length ? [...new Set(values.flatMap((value) => value.split(",")).filter(Boolean))] : [...SUPPORTED_PROVIDERS];
+  if (providers2.length === 0) throw new Error("at least one provider is required");
+  const unsupported = providers2.filter((provider) => !SUPPORTED_PROVIDERS.includes(provider));
+  if (unsupported.length) throw new Error(`setup currently supports providers: ${SUPPORTED_PROVIDERS.join(", ")}; unsupported: ${unsupported.join(", ")}`);
+  return providers2;
+}
+function relativeConfigPath(cwd, configPath) {
+  return (0, import_node_path5.relative)(cwd, configPath).replace(/\\/g, "/");
+}
+function isRecord3(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 // src/schema.ts
 var import__ = __toESM(require("ajv/dist/2020"));
-var import_node_fs5 = require("fs");
-var import_yaml3 = require("yaml");
+var import_node_fs6 = require("fs");
+var import_yaml4 = require("yaml");
 
 // schemas/freelane.schema.json
 var freelane_schema_default = {
@@ -1197,7 +1349,7 @@ var freelane_schema_default = {
 
 // src/schema.ts
 function validateConfigFile(path = findConfigPath()) {
-  const config = (0, import_yaml3.parse)((0, import_node_fs5.readFileSync)(path, "utf8"));
+  const config = (0, import_yaml4.parse)((0, import_node_fs6.readFileSync)(path, "utf8"));
   const ajv = new import__.default({ allErrors: true });
   const validate = ajv.compile(freelane_schema_default);
   const schemaValid = validate(config);
@@ -1225,11 +1377,11 @@ function formatValidation(result, format) {
   ].join("\n") + "\n";
 }
 function semanticIssues(config) {
-  if (!isRecord3(config) || !isRecord3(config.providers) || !isRecord3(config.jobs)) return [];
+  if (!isRecord4(config) || !isRecord4(config.providers) || !isRecord4(config.jobs)) return [];
   const issues = [];
   const providerIds = new Set(Object.keys(config.providers));
-  if (isRecord3(config.defaults)) {
-    if (isRecord3(config.defaults.reserve)) {
+  if (isRecord4(config.defaults)) {
+    if (isRecord4(config.defaults.reserve)) {
       for (const providerId of Object.keys(config.defaults.reserve)) {
         if (!providerIds.has(providerId)) {
           issues.push({
@@ -1239,12 +1391,12 @@ function semanticIssues(config) {
         }
       }
     }
-    if (isRecord3(config.defaults.fallback)) {
+    if (isRecord4(config.defaults.fallback)) {
       issues.push(...providerReferenceIssues(config.defaults.fallback.providers, pointer("defaults", "fallback", "providers"), providerIds));
     }
   }
   for (const [jobId, job] of Object.entries(config.jobs)) {
-    if (isRecord3(job)) {
+    if (isRecord4(job)) {
       issues.push(...providerReferenceIssues(job.providers, pointer("jobs", jobId, "providers"), providerIds));
     }
   }
@@ -1263,7 +1415,7 @@ function providerReferenceIssues(value, path, providerIds) {
 function pointer(...segments) {
   return `/${segments.map((segment) => segment.replace(/~/g, "~0").replace(/\//g, "~1")).join("/")}`;
 }
-function isRecord3(value) {
+function isRecord4(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -1311,11 +1463,11 @@ function formatAmount2(value, unit) {
 }
 
 // src/usage-state.ts
-var import_node_fs6 = require("fs");
-var import_node_path5 = require("path");
+var import_node_fs7 = require("fs");
+var import_node_path6 = require("path");
 var DEFAULT_USAGE_STATE = ".freelane-usage.json";
 function loadUsageState(path = DEFAULT_USAGE_STATE) {
-  const parsed = JSON.parse((0, import_node_fs6.readFileSync)(path, "utf8"));
+  const parsed = JSON.parse((0, import_node_fs7.readFileSync)(path, "utf8"));
   if (parsed.source !== "github-actions" || !parsed.providers) {
     throw new Error(`${path}: unsupported usage state`);
   }
@@ -1332,8 +1484,8 @@ function applyUsageState(config, state) {
 }
 function applyUsageStateIfPresent(config, options = {}) {
   if (options.disabled) return config;
-  const path = (0, import_node_path5.resolve)(options.path ?? DEFAULT_USAGE_STATE);
-  if (!options.path && !(0, import_node_fs6.existsSync)(path)) return config;
+  const path = (0, import_node_path6.resolve)(options.path ?? DEFAULT_USAGE_STATE);
+  if (!options.path && !(0, import_node_fs7.existsSync)(path)) return config;
   return applyUsageState(config, loadUsageState(path));
 }
 function copyConfig2(config) {
@@ -1382,6 +1534,7 @@ function copyConfig2(config) {
   resolveFreelane,
   roundQuota,
   sanitizeOutputName,
+  setupGitHubActions,
   starterConfig,
   usageReport,
   validateConfigFile,

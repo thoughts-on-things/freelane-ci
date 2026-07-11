@@ -176,11 +176,22 @@ function providerTotals(jobs: GitHubUsageJob[]): Record<string, GitHubUsageProvi
   for (const job of jobs) {
     const total = totals[job.provider] ?? { jobs: 0, minutes: 0 };
     total.jobs += 1;
-    total.minutes = roundQuota(total.minutes + job.durationMinutes);
+    total.minutes = roundQuota(total.minutes + quotaMinutes(job));
     totals[job.provider] = total;
   }
 
   return totals;
+}
+
+function quotaMinutes(job: GitHubUsageJob): number {
+  if (job.provider !== "blacksmith") return job.durationMinutes;
+  const label = job.labels.find((value) => value.startsWith("blacksmith-"));
+  const match = label && /^blacksmith-(\d+)vcpu-(ubuntu-[^-]+(?:-arm)?|windows-|macos-)/.exec(label);
+  if (!match) return job.durationMinutes;
+  const vcpuRatio = Math.max(1, Number(match[1]) / 2);
+  const platform = match[2];
+  const priceRatio = platform.endsWith("-arm") ? 0.625 : platform.startsWith("windows-") ? 2 : platform.startsWith("macos-") ? 20 / 3 : 1;
+  return roundQuota(job.durationMinutes * vcpuRatio * priceRatio);
 }
 
 async function listRuns(options: {

@@ -41,7 +41,7 @@ export function starterConfig(): string {
     "    arch: x64",
     "    min_vcpu: 2",
     "    estimate_minutes: 8",
-    "    providers: [blacksmith, ubicloud, warpbuild, github]",
+    "    providers: [github, blacksmith, ubicloud, warpbuild]",
     ""
   ].join("\n");
 }

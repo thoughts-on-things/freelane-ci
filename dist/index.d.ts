@@ -8,6 +8,7 @@ export { starterConfig, writeStarterConfig } from "./init";
 export { formatPlan, planFreelane } from "./plan";
 export { formatProviderList, listProviders } from "./provider-list";
 export { getRunnerOption, providerFactories } from "./providers";
+export { setupGitHubActions, type GitHubPlan, type SetupGitHubActionsOptions, type SetupGitHubActionsResult } from "./setup";
 export { displayUnit, quotaFor, roundQuota } from "./quota";
 export { resolveFreelane } from "./resolve";
 export { formatValidation, validateConfigFile } from "./schema";

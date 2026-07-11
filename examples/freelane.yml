@@ -40,10 +40,10 @@ jobs:
     min_vcpu: 2
     estimate_minutes: 8
     providers:
+      - github
       - blacksmith
       - ubicloud
       - warpbuild
-      - github
 
   test-macos:
     os: macos
@@ -51,7 +51,7 @@ jobs:
     min_vcpu: 6
     estimate_minutes: 12
     providers:
+      - github
       - blacksmith
       - warpbuild
       - namespace
-      - github

@@ -17,7 +17,31 @@ Namespace, and other services. Freelane gives teams one small routing layer:
 
 ## Quick Start
 
-Create a config:
+For an existing GitHub Actions repository, setup can discover jobs, create the
+config, and migrate one or more workflows in one command:
+
+```bash
+npx freelane-ci@latest setup github-actions \
+  --workflow .github/workflows/ci.yml \
+  --workflow .github/workflows/release.yml
+```
+
+This defaults to configured GitHub credits first, then Blacksmith (including its
+3,000 normalized free minutes). GitHub remains the default fallback; all
+provider order and fallback choices stay configurable. Before running the migrated workflows, authorize
+the GitHub organization at [app.blacksmith.sh](https://app.blacksmith.sh).
+Blacksmith currently supports organization-owned repositories, not personal
+repositories. Use `--provider github` for GitHub-only setup, or repeat
+`--provider` to choose the order explicitly. For a private repository, pass its
+plan with `--github-plan free|pro|team|enterprise`, or use `--github-minutes` for
+an exact allowance. Setup defaults conservatively to zero. Use
+`--github-plan public` for unlimited standard GitHub-hosted runners in a public
+repository.
+
+Setup preserves job steps and metadata. It reports jobs with dynamic or unknown
+`runs-on` values as skipped so they can be handled deliberately.
+
+For a new workflow, create a config first:
 
 ```bash
 npx freelane-ci@latest init
@@ -44,7 +68,7 @@ jobs:
     arch: x64
     min_vcpu: 2
     estimate_minutes: 8
-    providers: [blacksmith, ubicloud, github]
+    providers: [github, blacksmith, ubicloud]
 ```
 
 Preview the route and generate a starter workflow:
