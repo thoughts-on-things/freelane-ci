@@ -87,8 +87,8 @@ jobs:
       - run: npm test
 ```
 
-Use `runs-on: ${{ fromJSON(needs.freelane.outputs.test_linux_runs_on) }}` only
-when a job may resolve to an array-style runner.
+The CLI automatically uses the JSON runner output when a job resolves to an
+array-style runner.
 
 Try the CLI locally:
 

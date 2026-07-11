@@ -504,12 +504,13 @@ function generateGitHubActionsWorkflow(config, options = {}) {
     );
   }
   for (const alias of aliases) {
+    const runsOn = workflowRunsOn(config, alias.job, alias.alias);
     lines.push(
       "",
       `  ${alias.alias}:`,
       `    name: ${yamlString(alias.job)}`,
       "    needs: freelane",
-      `    runs-on: \${{ needs.freelane.outputs.${alias.alias} }}`,
+      `    runs-on: ${runsOn}`,
       "    steps:",
       "      - uses: actions/checkout@v7",
       `      - run: echo "Replace this with the ${shellSafe(alias.job)} CI command"`
@@ -551,6 +552,11 @@ function migrateGitHubActionsWorkflowContent(config, raw, options = {}) {
   const skipped = [];
   const routedAliases = /* @__PURE__ */ new Set();
   delete jobs.freelane;
+  for (const [workflowJob, freelaneJob] of Object.entries(options.jobMap ?? {})) {
+    if (!config.jobs[freelaneJob]) {
+      throw new Error(`--job-map ${workflowJob} references unknown Freelane job: ${freelaneJob}`);
+    }
+  }
   for (const [workflowJob, job] of Object.entries(jobs)) {
     if (!isRecord2(job)) {
       skipped.push({ workflowJob, reason: "job is not an object" });
@@ -578,7 +584,7 @@ function migrateGitHubActionsWorkflowContent(config, raw, options = {}) {
       skipped.push({ workflowJob, reason: error instanceof Error ? error.message : String(error) });
       continue;
     }
-    jobs[workflowJob] = routedJob(job, needs, `\${{ needs.freelane.outputs.${alias} }}`);
+    jobs[workflowJob] = routedJob(job, needs, workflowRunsOn(config, freelaneJob, alias));
     routed.push({ workflowJob, freelaneJob, alias, runner });
     routedAliases.add(alias);
   }
@@ -670,6 +676,15 @@ function addNeed(existing, required) {
     return existing.includes(required) ? existing : [required, ...existing];
   }
   throw new Error("cannot migrate job with non-string needs");
+}
+function workflowRunsOn(config, job, alias) {
+  const jobConfig = config.jobs[job];
+  const providerIds = jobConfig.providers ?? Object.keys(config.providers);
+  const mayUseRunnerArray = Array.isArray(jobConfig.runner) || providerIds.some((provider) => Array.isArray(config.providers[provider]?.runner));
+  if (mayUseRunnerArray) {
+    return `\${{ fromJSON(needs.freelane.outputs.${alias}_runs_on) }}`;
+  }
+  return `\${{ needs.freelane.outputs.${alias} }}`;
 }
 function sanitizeOutputName(value) {
   const sanitized = value.toLowerCase().replace(/[^a-z0-9_]+/g, "_").replace(/^_+|_+$/g, "").replace(/_+/g, "_");

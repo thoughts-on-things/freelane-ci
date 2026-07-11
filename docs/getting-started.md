@@ -80,8 +80,8 @@ Use `init github-actions` when starting a new workflow from scratch:
 npx freelane-ci@latest init github-actions
 ```
 
-Use `runs-on: ${{ fromJSON(needs.freelane.outputs.test_linux_runs_on) }}` only
-when a job may resolve to an array-style runner.
+The CLI automatically uses the JSON runner output when a job resolves to an
+array-style runner.
 
 The action logs the selected job, provider, runner, quota burn, remaining quota,
 and reason. It also writes the same route decision to the GitHub job summary.

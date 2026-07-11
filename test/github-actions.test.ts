@@ -119,4 +119,35 @@ describe("github actions workflow generation", () => {
     expect(migration.routed[0]?.freelaneJob).toBe("test-linux");
     expect(migration.content).toContain("runs-on: ${{ needs.freelane.outputs.test_linux }}");
   });
+
+  it("uses JSON runner outputs for multi-label runners", () => {
+    const arrayConfig: FreelaneConfig = {
+      version: 1,
+      providers: { github: { enabled: true } },
+      jobs: {
+        gpu: {
+          os: "linux",
+          runner: ["self-hosted", "linux", "gpu"]
+        }
+      }
+    };
+    const generated = generateGitHubActionsWorkflow(arrayConfig);
+    const migrated = migrateGitHubActionsWorkflowContent(
+      arrayConfig,
+      "jobs:\n  gpu:\n    runs-on: self-hosted\n    steps:\n      - run: npm test\n"
+    );
+
+    expect(generated).toContain("runs-on: ${{ fromJSON(needs.freelane.outputs.gpu_runs_on) }}");
+    expect(migrated.content).toContain("runs-on: ${{ fromJSON(needs.freelane.outputs.gpu_runs_on) }}");
+  });
+
+  it("rejects job maps that reference unknown Freelane jobs", () => {
+    expect(() =>
+      migrateGitHubActionsWorkflowContent(
+        config,
+        "jobs:\n  check:\n    runs-on: ubuntu-latest\n",
+        { jobMap: { check: "typo" } }
+      )
+    ).toThrow(/unknown Freelane job: typo/);
+  });
 });

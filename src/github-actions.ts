@@ -120,12 +120,13 @@ export function generateGitHubActionsWorkflow(
   }
 
   for (const alias of aliases) {
+    const runsOn = workflowRunsOn(config, alias.job, alias.alias);
     lines.push(
       "",
       `  ${alias.alias}:`,
       `    name: ${yamlString(alias.job)}`,
       "    needs: freelane",
-      `    runs-on: \${{ needs.freelane.outputs.${alias.alias} }}`,
+      `    runs-on: ${runsOn}`,
       "    steps:",
       "      - uses: actions/checkout@v7",
       `      - run: echo "Replace this with the ${shellSafe(alias.job)} CI command"`
@@ -187,6 +188,12 @@ export function migrateGitHubActionsWorkflowContent(
 
   delete jobs.freelane;
 
+  for (const [workflowJob, freelaneJob] of Object.entries(options.jobMap ?? {})) {
+    if (!config.jobs[freelaneJob]) {
+      throw new Error(`--job-map ${workflowJob} references unknown Freelane job: ${freelaneJob}`);
+    }
+  }
+
   for (const [workflowJob, job] of Object.entries(jobs)) {
     if (!isRecord(job)) {
       skipped.push({ workflowJob, reason: "job is not an object" });
@@ -219,7 +226,7 @@ export function migrateGitHubActionsWorkflowContent(
       continue;
     }
 
-    jobs[workflowJob] = routedJob(job, needs, `\${{ needs.freelane.outputs.${alias} }}`);
+    jobs[workflowJob] = routedJob(job, needs, workflowRunsOn(config, freelaneJob, alias));
     routed.push({ workflowJob, freelaneJob, alias, runner });
     routedAliases.add(alias);
   }
@@ -332,6 +339,18 @@ function addNeed(existing: unknown, required: string): string | string[] {
     return existing.includes(required) ? existing : [required, ...existing];
   }
   throw new Error("cannot migrate job with non-string needs");
+}
+
+function workflowRunsOn(config: FreelaneConfig, job: string, alias: string): string {
+  const jobConfig = config.jobs[job];
+  const providerIds = jobConfig.providers ?? Object.keys(config.providers);
+  const mayUseRunnerArray = Array.isArray(jobConfig.runner)
+    || providerIds.some((provider) => Array.isArray(config.providers[provider]?.runner));
+
+  if (mayUseRunnerArray) {
+    return `\${{ fromJSON(needs.freelane.outputs.${alias}_runs_on) }}`;
+  }
+  return `\${{ needs.freelane.outputs.${alias} }}`;
 }
 
 export function sanitizeOutputName(value: string): string {
