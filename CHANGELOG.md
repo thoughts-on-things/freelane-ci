@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/thoughts-on-things/freelane-ci/compare/v0.4.0...v0.5.0) (2026-07-13)
+
+
+### Features
+
+* **action:** learn usage and batch workflow routing ([#15](https://github.com/thoughts-on-things/freelane-ci/issues/15)) ([0a97567](https://github.com/thoughts-on-things/freelane-ci/commit/0a9756706c9c012ff053ccc9aad7b83c4fc39b33))
+
 ## [0.4.0](https://github.com/thoughts-on-things/freelane-ci/compare/v0.3.0...v0.4.0) (2026-07-11)
 
 
