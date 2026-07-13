@@ -12,6 +12,10 @@ var __commonJS = (cb, mod) => function __require() {
     throw mod = 0, e;
   }
 };
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
 var __copyProps = (to, from, except, desc) => {
   if (from && typeof from === "object" || typeof from === "function") {
     for (let key of __getOwnPropNames(from))
@@ -28,6 +32,7 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
   mod
 ));
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
 // node_modules/tunnel/lib/tunnel.js
 var require_tunnel = __commonJS({
@@ -2085,9 +2090,9 @@ var require_dispatcher_base = __commonJS({
       }
       close(callback) {
         if (callback === void 0) {
-          return new Promise((resolve2, reject) => {
+          return new Promise((resolve4, reject) => {
             this.close((err, data) => {
-              return err ? reject(err) : resolve2(data);
+              return err ? reject(err) : resolve4(data);
             });
           });
         }
@@ -2125,12 +2130,12 @@ var require_dispatcher_base = __commonJS({
           err = null;
         }
         if (callback === void 0) {
-          return new Promise((resolve2, reject) => {
+          return new Promise((resolve4, reject) => {
             this.destroy(err, (err2, data) => {
               return err2 ? (
                 /* istanbul ignore next: should never error */
                 reject(err2)
-              ) : resolve2(data);
+              ) : resolve4(data);
             });
           });
         }
@@ -4397,8 +4402,8 @@ var require_util2 = __commonJS({
     function createDeferredPromise() {
       let res;
       let rej;
-      const promise = new Promise((resolve2, reject) => {
-        res = resolve2;
+      const promise = new Promise((resolve4, reject) => {
+        res = resolve4;
         rej = reject;
       });
       return { promise, resolve: res, reject: rej };
@@ -6635,12 +6640,12 @@ upgrade: ${upgrade}\r
           cb();
         }
       }
-      const waitForDrain = () => new Promise((resolve2, reject) => {
+      const waitForDrain = () => new Promise((resolve4, reject) => {
         assert(callback === null);
         if (socket[kError]) {
           reject(socket[kError]);
         } else {
-          callback = resolve2;
+          callback = resolve4;
         }
       });
       socket.on("close", onDrain).on("drain", onDrain);
@@ -7277,12 +7282,12 @@ var require_client_h2 = __commonJS({
           cb();
         }
       }
-      const waitForDrain = () => new Promise((resolve2, reject) => {
+      const waitForDrain = () => new Promise((resolve4, reject) => {
         assert(callback === null);
         if (socket[kError]) {
           reject(socket[kError]);
         } else {
-          callback = resolve2;
+          callback = resolve4;
         }
       });
       h2stream.on("close", onDrain).on("drain", onDrain);
@@ -7760,16 +7765,16 @@ var require_client = __commonJS({
         return this[kNeedDrain] < 2;
       }
       async [kClose]() {
-        return new Promise((resolve2) => {
+        return new Promise((resolve4) => {
           if (this[kSize]) {
-            this[kClosedResolve] = resolve2;
+            this[kClosedResolve] = resolve4;
           } else {
-            resolve2(null);
+            resolve4(null);
           }
         });
       }
       async [kDestroy](err) {
-        return new Promise((resolve2) => {
+        return new Promise((resolve4) => {
           const requests = this[kQueue].splice(this[kPendingIdx]);
           for (let i = 0; i < requests.length; i++) {
             const request = requests[i];
@@ -7780,7 +7785,7 @@ var require_client = __commonJS({
               this[kClosedResolve]();
               this[kClosedResolve] = null;
             }
-            resolve2(null);
+            resolve4(null);
           };
           if (this[kHTTPContext]) {
             this[kHTTPContext].destroy(err, callback);
@@ -7831,7 +7836,7 @@ var require_client = __commonJS({
         });
       }
       try {
-        const socket = await new Promise((resolve2, reject) => {
+        const socket = await new Promise((resolve4, reject) => {
           client[kConnector]({
             host,
             hostname,
@@ -7843,7 +7848,7 @@ var require_client = __commonJS({
             if (err) {
               reject(err);
             } else {
-              resolve2(socket2);
+              resolve4(socket2);
             }
           });
         });
@@ -8180,8 +8185,8 @@ var require_pool_base = __commonJS({
         if (this[kQueue].isEmpty()) {
           await Promise.all(this[kClients].map((c) => c.close()));
         } else {
-          await new Promise((resolve2) => {
-            this[kClosedResolve] = resolve2;
+          await new Promise((resolve4) => {
+            this[kClosedResolve] = resolve4;
           });
         }
       }
@@ -9396,7 +9401,7 @@ var require_readable = __commonJS({
         if (this._readableState.closeEmitted) {
           return null;
         }
-        return await new Promise((resolve2, reject) => {
+        return await new Promise((resolve4, reject) => {
           if (this[kContentLength] > limit) {
             this.destroy(new AbortError());
           }
@@ -9409,7 +9414,7 @@ var require_readable = __commonJS({
             if (signal?.aborted) {
               reject(signal.reason ?? new AbortError());
             } else {
-              resolve2(null);
+              resolve4(null);
             }
           }).on("error", noop).on("data", function(chunk) {
             limit -= chunk.length;
@@ -9428,7 +9433,7 @@ var require_readable = __commonJS({
     }
     async function consume(stream, type) {
       assert(!stream[kConsume]);
-      return new Promise((resolve2, reject) => {
+      return new Promise((resolve4, reject) => {
         if (isUnusable(stream)) {
           const rState = stream._readableState;
           if (rState.destroyed && rState.closeEmitted === false) {
@@ -9445,7 +9450,7 @@ var require_readable = __commonJS({
             stream[kConsume] = {
               type,
               stream,
-              resolve: resolve2,
+              resolve: resolve4,
               reject,
               length: 0,
               body: []
@@ -9515,18 +9520,18 @@ var require_readable = __commonJS({
       return buffer;
     }
     function consumeEnd(consume2) {
-      const { type, body, resolve: resolve2, stream, length } = consume2;
+      const { type, body, resolve: resolve4, stream, length } = consume2;
       try {
         if (type === "text") {
-          resolve2(chunksDecode(body, length));
+          resolve4(chunksDecode(body, length));
         } else if (type === "json") {
-          resolve2(JSON.parse(chunksDecode(body, length)));
+          resolve4(JSON.parse(chunksDecode(body, length)));
         } else if (type === "arrayBuffer") {
-          resolve2(chunksConcat(body, length).buffer);
+          resolve4(chunksConcat(body, length).buffer);
         } else if (type === "blob") {
-          resolve2(new Blob(body, { type: stream[kContentType] }));
+          resolve4(new Blob(body, { type: stream[kContentType] }));
         } else if (type === "bytes") {
-          resolve2(chunksConcat(body, length));
+          resolve4(chunksConcat(body, length));
         }
         consumeFinish(consume2);
       } catch (err) {
@@ -9784,9 +9789,9 @@ var require_api_request = __commonJS({
     };
     function request(opts, callback) {
       if (callback === void 0) {
-        return new Promise((resolve2, reject) => {
+        return new Promise((resolve4, reject) => {
           request.call(this, opts, (err, data) => {
-            return err ? reject(err) : resolve2(data);
+            return err ? reject(err) : resolve4(data);
           });
         });
       }
@@ -10010,9 +10015,9 @@ var require_api_stream = __commonJS({
     };
     function stream(opts, factory, callback) {
       if (callback === void 0) {
-        return new Promise((resolve2, reject) => {
+        return new Promise((resolve4, reject) => {
           stream.call(this, opts, factory, (err, data) => {
-            return err ? reject(err) : resolve2(data);
+            return err ? reject(err) : resolve4(data);
           });
         });
       }
@@ -10297,9 +10302,9 @@ var require_api_upgrade = __commonJS({
     };
     function upgrade(opts, callback) {
       if (callback === void 0) {
-        return new Promise((resolve2, reject) => {
+        return new Promise((resolve4, reject) => {
           upgrade.call(this, opts, (err, data) => {
-            return err ? reject(err) : resolve2(data);
+            return err ? reject(err) : resolve4(data);
           });
         });
       }
@@ -10391,9 +10396,9 @@ var require_api_connect = __commonJS({
     };
     function connect(opts, callback) {
       if (callback === void 0) {
-        return new Promise((resolve2, reject) => {
+        return new Promise((resolve4, reject) => {
           connect.call(this, opts, (err, data) => {
-            return err ? reject(err) : resolve2(data);
+            return err ? reject(err) : resolve4(data);
           });
         });
       }
@@ -13433,7 +13438,7 @@ var require_fetch = __commonJS({
     function handleFetchDone(response) {
       finalizeAndReportTiming(response, "fetch");
     }
-    function fetch(input, init = void 0) {
+    function fetch2(input, init = void 0) {
       webidl.argumentLengthCheck(arguments, 1, "globalThis.fetch");
       let p = createDeferredPromise();
       let requestObject;
@@ -14255,7 +14260,7 @@ var require_fetch = __commonJS({
       function dispatch({ body }) {
         const url = requestCurrentURL(request);
         const agent = fetchParams.controller.dispatcher;
-        return new Promise((resolve2, reject) => agent.dispatch(
+        return new Promise((resolve4, reject) => agent.dispatch(
           {
             path: url.pathname + url.search,
             origin: url.origin,
@@ -14331,7 +14336,7 @@ var require_fetch = __commonJS({
                 }
               }
               const onError = this.onError.bind(this);
-              resolve2({
+              resolve4({
                 status,
                 statusText,
                 headersList,
@@ -14377,7 +14382,7 @@ var require_fetch = __commonJS({
               for (let i = 0; i < rawHeaders.length; i += 2) {
                 headersList.append(bufferToLowerCasedHeaderName(rawHeaders[i]), rawHeaders[i + 1].toString("latin1"), true);
               }
-              resolve2({
+              resolve4({
                 status,
                 statusText: STATUS_CODES[status],
                 headersList,
@@ -14390,7 +14395,7 @@ var require_fetch = __commonJS({
       }
     }
     module2.exports = {
-      fetch,
+      fetch: fetch2,
       Fetch,
       fetching,
       finalizeAndReportTiming
@@ -18069,8 +18074,8 @@ var require_util8 = __commonJS({
       return true;
     }
     function delay(ms) {
-      return new Promise((resolve2) => {
-        setTimeout(resolve2, ms).unref();
+      return new Promise((resolve4) => {
+        setTimeout(resolve4, ms).unref();
       });
     }
     module2.exports = {
@@ -18701,7 +18706,7 @@ var require_undici = __commonJS({
     module2.exports.setGlobalDispatcher = setGlobalDispatcher;
     module2.exports.getGlobalDispatcher = getGlobalDispatcher;
     var fetchImpl = require_fetch().fetch;
-    module2.exports.fetch = async function fetch(init, options = void 0) {
+    module2.exports.fetch = async function fetch2(init, options = void 0) {
       try {
         return await fetchImpl(init, options);
       } catch (err) {
@@ -29028,7 +29033,7 @@ var require_compile = __commonJS({
       const schOrFunc = root.refs[ref];
       if (schOrFunc)
         return schOrFunc;
-      let _sch = resolve2.call(this, root, ref);
+      let _sch = resolve4.call(this, root, ref);
       if (_sch === void 0) {
         const schema = (_a = root.localRefs) === null || _a === void 0 ? void 0 : _a[ref];
         const { schemaId } = this.opts;
@@ -29055,7 +29060,7 @@ var require_compile = __commonJS({
     function sameSchemaEnv(s1, s2) {
       return s1.schema === s2.schema && s1.root === s2.root && s1.baseId === s2.baseId;
     }
-    function resolve2(root, ref) {
+    function resolve4(root, ref) {
       let sch;
       while (typeof (sch = this.refs[ref]) == "string")
         ref = sch;
@@ -29686,7 +29691,7 @@ var require_fast_uri = __commonJS({
       }
       return uri;
     }
-    function resolve2(baseURI, relativeURI, options) {
+    function resolve4(baseURI, relativeURI, options) {
       const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
       const resolved = resolveComponent(parse3(baseURI, schemelessOptions), parse3(relativeURI, schemelessOptions), schemelessOptions, true);
       schemelessOptions.skipEscape = true;
@@ -29944,7 +29949,7 @@ var require_fast_uri = __commonJS({
     var fastUri = {
       SCHEMES,
       normalize,
-      resolve: resolve2,
+      resolve: resolve4,
       resolveComponent,
       equal,
       serialize,
@@ -33191,6 +33196,13 @@ var require__ = __commonJS({
   }
 });
 
+// src/action.ts
+var action_exports = {};
+__export(action_exports, {
+  run: () => run
+});
+module.exports = __toCommonJS(action_exports);
+
 // node_modules/@actions/core/lib/command.js
 var os = __toESM(require("os"), 1);
 
@@ -33356,11 +33368,11 @@ var import_os = require("os");
 var import_fs = require("fs");
 var __awaiter = function(thisArg, _arguments, P, generator) {
   function adopt(value) {
-    return value instanceof P ? value : new P(function(resolve2) {
-      resolve2(value);
+    return value instanceof P ? value : new P(function(resolve4) {
+      resolve4(value);
     });
   }
-  return new (P || (P = Promise))(function(resolve2, reject) {
+  return new (P || (P = Promise))(function(resolve4, reject) {
     function fulfilled(value) {
       try {
         step(generator.next(value));
@@ -33376,7 +33388,7 @@ var __awaiter = function(thisArg, _arguments, P, generator) {
       }
     }
     function step(result) {
-      result.done ? resolve2(result.value) : adopt(result.value).then(fulfilled, rejected);
+      result.done ? resolve4(result.value) : adopt(result.value).then(fulfilled, rejected);
     }
     step((generator = generator.apply(thisArg, _arguments || [])).next());
   });
@@ -33762,6 +33774,10 @@ function isRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+// src/github-usage.ts
+var import_node_fs2 = require("fs");
+var import_node_path2 = require("path");
+
 // src/quota.ts
 function quotaFor(provider, unit, reserve = 0) {
   const quota = rawQuotaFor(provider, unit);
@@ -33797,6 +33813,205 @@ function displayUnit(unit) {
 function roundQuota(value) {
   if (!Number.isFinite(value)) return value;
   return Math.round(value * 1e4) / 1e4;
+}
+
+// src/github-usage.ts
+var DEFAULT_DAYS = 30;
+var DEFAULT_LIMIT = 50;
+async function collectGitHubUsage(options) {
+  const repository = normalizeRepo(options.repo);
+  const [owner, repo] = repository.split("/");
+  const apiUrl = (options.apiUrl ?? "https://api.github.com").replace(/\/$/, "");
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const now = options.now ?? /* @__PURE__ */ new Date();
+  const days = options.days ?? DEFAULT_DAYS;
+  const limit = options.limit ?? DEFAULT_LIMIT;
+  const since = options.since ?? new Date(now.getTime() - days * 24 * 60 * 60 * 1e3);
+  const headers = githubHeaders(options.token);
+  const runs = await listRuns({ apiUrl, owner, repo, since, limit, headers, fetchImpl });
+  const jobs = [];
+  for (const run2 of runs) {
+    const runJobs = await listJobs({ apiUrl, owner, repo, runId: run2.id, headers, fetchImpl });
+    for (const job of runJobs) {
+      const usageJob = usageJobFromWorkflowJob(job);
+      if (usageJob) jobs.push(usageJob);
+    }
+  }
+  return {
+    source: "github-actions",
+    repository,
+    generatedAt: now.toISOString(),
+    since: since.toISOString(),
+    runCount: runs.length,
+    jobCount: jobs.length,
+    providers: providerTotals(jobs),
+    jobs,
+    estimates: durationEstimates(jobs)
+  };
+}
+function learnedEstimateMinutes(jobId, job, state) {
+  const estimates = state.estimates ?? durationEstimates(state.jobs);
+  const normalized = normalizeJobName(jobId);
+  const exact = Object.entries(estimates.names).filter(([name]) => name === normalized || name.startsWith(`${normalized} (`) || name.startsWith(`${normalized} /`)).map(([, estimate2]) => estimate2);
+  if (exact.length) return Math.max(...exact.map((estimate2) => estimate2.p75));
+  return estimates.platforms[platformForJob(job)]?.p75;
+}
+function inferProvider(labels, runnerName = "", runnerGroupName = "") {
+  const haystack = [...labels, runnerName, runnerGroupName].join(" ").toLowerCase();
+  if (haystack.includes("blacksmith")) return "blacksmith";
+  if (haystack.includes("ubicloud")) return "ubicloud";
+  if (haystack.includes("warpbuild") || /\bwarp-/.test(haystack)) return "warpbuild";
+  if (haystack.includes("namespace") || haystack.includes("nscloud")) return "namespace";
+  if (labels.some((label) => isGitHubHostedLabel(label))) return "github";
+  return "unknown";
+}
+function usageJobFromWorkflowJob(job) {
+  if (!job.started_at || !job.completed_at) return void 0;
+  const started = Date.parse(job.started_at);
+  const completed = Date.parse(job.completed_at);
+  if (!Number.isFinite(started) || !Number.isFinite(completed) || completed < started) return void 0;
+  const labels = job.labels ?? [];
+  const durationMinutes = roundQuota((completed - started) / 6e4);
+  return {
+    runId: job.run_id,
+    jobId: job.id,
+    name: job.name,
+    workflowName: job.workflow_name,
+    conclusion: job.conclusion,
+    provider: inferProvider(labels, job.runner_name, job.runner_group_name),
+    labels,
+    startedAt: job.started_at,
+    completedAt: job.completed_at,
+    durationMinutes
+  };
+}
+function providerTotals(jobs) {
+  const totals = {};
+  for (const job of jobs) {
+    const total = totals[job.provider] ?? { jobs: 0, minutes: 0 };
+    total.jobs += 1;
+    total.minutes = roundQuota(total.minutes + quotaMinutes(job));
+    totals[job.provider] = total;
+  }
+  return totals;
+}
+function durationEstimates(jobs) {
+  const names = /* @__PURE__ */ new Map();
+  const platforms = /* @__PURE__ */ new Map();
+  for (const job of jobs) {
+    if (job.conclusion && job.conclusion !== "success") continue;
+    if (/^(choose runners|freelane|route workflow jobs)$/i.test(job.name)) continue;
+    addSample(names, normalizeJobName(job.name), job.durationMinutes);
+    const platform2 = platformForLabels(job.labels);
+    if (platform2) addSample(platforms, platform2, job.durationMinutes);
+  }
+  return {
+    names: Object.fromEntries([...names].map(([key, values]) => [key, estimate(values)])),
+    platforms: Object.fromEntries([...platforms].map(([key, values]) => [key, estimate(values)]))
+  };
+}
+function addSample(groups, key, value) {
+  if (!key || value <= 0) return;
+  const values = groups.get(key) ?? [];
+  values.push(value);
+  groups.set(key, values);
+}
+function estimate(values) {
+  const sorted = [...values].sort((left, right) => left - right);
+  return {
+    samples: sorted.length,
+    p50: percentile(sorted, 0.5),
+    p75: percentile(sorted, 0.75),
+    p90: percentile(sorted, 0.9)
+  };
+}
+function percentile(sorted, quantile) {
+  return roundQuota(sorted[Math.max(0, Math.ceil(sorted.length * quantile) - 1)] ?? 0);
+}
+function normalizeJobName(value) {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
+function platformForJob(job) {
+  return `${job.os}:${job.arch ?? "x64"}`;
+}
+function platformForLabels(labels) {
+  const value = labels.join(" ").toLowerCase();
+  const os5 = /windows/.test(value) ? "windows" : /macos/.test(value) ? "macos" : /ubuntu|linux/.test(value) ? "linux" : void 0;
+  if (!os5) return void 0;
+  const arch2 = /(?:arm64|ubuntu-(?:2204|2404|24\.04)-arm|ubuntu-\d+-arm)/.test(value) || os5 === "macos" ? "arm64" : "x64";
+  return `${os5}:${arch2}`;
+}
+function quotaMinutes(job) {
+  if (job.provider === "github") {
+    const labels = job.labels.join(" ").toLowerCase();
+    const multiplier = labels.includes("windows") ? 2 : labels.includes("macos") ? 10 : 1;
+    return roundQuota(job.durationMinutes * multiplier);
+  }
+  if (job.provider !== "blacksmith") return job.durationMinutes;
+  const label = job.labels.find((value) => value.startsWith("blacksmith-"));
+  const match = label && /^blacksmith-(\d+)vcpu-(ubuntu-[^-]+(?:-arm)?|windows-|macos-)/.exec(label);
+  if (!match) return job.durationMinutes;
+  const vcpuRatio = Math.max(1, Number(match[1]) / 2);
+  const platform2 = match[2];
+  const priceRatio = platform2.endsWith("-arm") ? 0.625 : platform2.startsWith("windows-") ? 2 : platform2.startsWith("macos-") ? 20 / 3 : 1;
+  return roundQuota(job.durationMinutes * vcpuRatio * priceRatio);
+}
+async function listRuns(options) {
+  const runs = [];
+  let page = 1;
+  while (runs.length < options.limit) {
+    const perPage = Math.min(100, options.limit - runs.length);
+    const url = new URL(`${options.apiUrl}/repos/${options.owner}/${options.repo}/actions/runs`);
+    url.searchParams.set("status", "completed");
+    url.searchParams.set("created", `>=${options.since.toISOString()}`);
+    url.searchParams.set("per_page", String(perPage));
+    url.searchParams.set("page", String(page));
+    const response = await requestJson(options.fetchImpl, url.toString(), options.headers);
+    const pageRuns = response.workflow_runs ?? [];
+    runs.push(...pageRuns);
+    if (pageRuns.length < perPage) break;
+    page += 1;
+  }
+  return runs;
+}
+async function listJobs(options) {
+  const jobs = [];
+  let page = 1;
+  while (true) {
+    const url = new URL(`${options.apiUrl}/repos/${options.owner}/${options.repo}/actions/runs/${options.runId}/jobs`);
+    url.searchParams.set("per_page", "100");
+    url.searchParams.set("page", String(page));
+    const response = await requestJson(options.fetchImpl, url.toString(), options.headers);
+    const pageJobs = response.jobs ?? [];
+    jobs.push(...pageJobs);
+    if (pageJobs.length < 100) break;
+    page += 1;
+  }
+  return jobs;
+}
+async function requestJson(fetchImpl, url, headers) {
+  const response = await fetchImpl(url, { headers });
+  if (!response.ok) {
+    throw new Error(`GitHub API request failed: ${response.status} ${response.statusText}`);
+  }
+  return response.json();
+}
+function githubHeaders(token) {
+  const headers = {
+    Accept: "application/vnd.github+json",
+    "User-Agent": "freelane-ci"
+  };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  return headers;
+}
+function normalizeRepo(repo) {
+  if (!/^[^/]+\/[^/]+$/.test(repo)) {
+    throw new Error("--repo must use owner/repo");
+  }
+  return repo;
+}
+function isGitHubHostedLabel(label) {
+  return /^(ubuntu|windows|macos)-/.test(label.toLowerCase());
 }
 
 // src/providers.ts
@@ -34011,9 +34226,50 @@ function directDecision(jobId, job) {
   };
 }
 
+// src/plan.ts
+function planFreelane(config, jobIds = Object.keys(config.jobs)) {
+  const working = copyConfig(config);
+  const decisions = jobIds.map((jobId) => {
+    const decision2 = resolveFreelane(working, jobId);
+    const planned = {
+      ...decision2,
+      remaining: remainingAfter(decision2.available, decision2.quotaBurn)
+    };
+    consumeQuota(working.providers[decision2.provider], decision2.quotaUnit, decision2.quotaBurn);
+    return planned;
+  });
+  return { decisions };
+}
+function copyConfig(config) {
+  return {
+    ...config,
+    defaults: config.defaults ? { ...config.defaults } : void 0,
+    providers: Object.fromEntries(
+      Object.entries(config.providers).map(([id, provider]) => [id, { ...provider }])
+    ),
+    jobs: Object.fromEntries(
+      Object.entries(config.jobs).map(([id, job]) => [id, { ...job }])
+    )
+  };
+}
+function consumeQuota(provider, unit, burn) {
+  if (!provider || unit === "unlimited" || burn <= 0 || !Number.isFinite(burn)) return;
+  if (unit === "usd") {
+    provider.used_credit_usd = roundQuota((provider.used_credit_usd ?? 0) + burn);
+  } else if (unit === "unit_minutes") {
+    provider.used_unit_minutes = roundQuota((provider.used_unit_minutes ?? 0) + burn);
+  } else {
+    provider.used_minutes = roundQuota((provider.used_minutes ?? 0) + burn);
+  }
+}
+function remainingAfter(available, burn) {
+  if (!Number.isFinite(available)) return available;
+  return roundQuota(available - burn);
+}
+
 // src/schema.ts
 var import__ = __toESM(require__());
-var import_node_fs2 = require("fs");
+var import_node_fs3 = require("fs");
 var import_yaml2 = __toESM(require_dist());
 
 // schemas/freelane.schema.json
@@ -34194,7 +34450,7 @@ var freelane_schema_default = {
 
 // src/schema.ts
 function validateConfigFile(path = findConfigPath()) {
-  const config = (0, import_yaml2.parse)((0, import_node_fs2.readFileSync)(path, "utf8"));
+  const config = (0, import_yaml2.parse)((0, import_node_fs3.readFileSync)(path, "utf8"));
   const ajv = new import__.default({ allErrors: true });
   const validate = ajv.compile(freelane_schema_default);
   const schemaValid = validate(config);
@@ -34264,36 +34520,114 @@ function isRecord2(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+// src/usage-state.ts
+var import_node_fs4 = require("fs");
+var import_node_path3 = require("path");
+function applyUsageState(config, state) {
+  const next = copyConfig2(config);
+  for (const [providerId, total] of Object.entries(state.providers)) {
+    const provider = next.providers[providerId];
+    if (!provider || quotaUnitForProvider(provider) !== "minutes") continue;
+    provider.used_minutes = roundQuota(Math.max(provider.used_minutes ?? 0, total.minutes));
+  }
+  for (const [jobId, job] of Object.entries(next.jobs)) {
+    if (job.estimate_minutes !== void 0) continue;
+    const learned = learnedEstimateMinutes(jobId, job, state);
+    if (learned !== void 0) job.estimate_minutes = learned;
+  }
+  return next;
+}
+function copyConfig2(config) {
+  return {
+    ...config,
+    defaults: config.defaults ? { ...config.defaults } : void 0,
+    providers: Object.fromEntries(
+      Object.entries(config.providers).map(([id, provider]) => [id, { ...provider }])
+    ),
+    jobs: Object.fromEntries(
+      Object.entries(config.jobs).map(([id, job]) => [id, { ...job }])
+    )
+  };
+}
+
 // src/action.ts
 async function run() {
-  const job = getInput("job", { required: true });
+  const jobsInput = getInput("jobs");
+  const job = getInput("job", { required: !jobsInput });
   const configPath = getInput("config") || ".freelane.yml";
   const shouldValidate = getBooleanInput("validate");
   if (shouldValidate) {
     const validation = validateConfigFile(configPath);
     if (!validation.valid) throw new Error(formatValidation(validation, "text").trim());
   }
-  const config = loadConfig(configPath);
+  const config = await configWithLiveUsage(loadConfig(configPath));
+  if (jobsInput) {
+    const jobs = parseBatchJobs(jobsInput);
+    const plan = planFreelane(config, jobs.map((item) => item.job));
+    for (const [index, item] of jobs.entries()) setBatchOutputs(item.alias, plan.decisions[index]);
+    logBatch(plan.decisions);
+    for (const decision3 of plan.decisions) warnIfPaid(config, decision3);
+    await writeSummary(config, plan.decisions);
+    return;
+  }
   const decision2 = resolveFreelane(config, job);
+  setLegacyOutputs(decision2);
+  logDecision(decision2);
+  warnIfPaid(config, decision2);
+  await writeSummary(config, [decision2]);
+}
+async function configWithLiveUsage(config) {
+  const token = getInput("token");
+  const repo = getInput("repository") || process.env.GITHUB_REPOSITORY;
+  const syncUsage = getInput("sync_usage") !== "false";
+  if (!syncUsage || !token || !repo) return config;
+  try {
+    const now = /* @__PURE__ */ new Date();
+    const state = await collectGitHubUsage({
+      repo,
+      token,
+      since: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)),
+      limit: positiveIntegerInput("history_limit", 100),
+      now
+    });
+    info(`Learned routing state from ${state.jobCount} completed jobs across ${state.runCount} runs.`);
+    return applyUsageState(config, state);
+  } catch (error2) {
+    warning(`Could not sync live usage; routing with configured state: ${error2 instanceof Error ? error2.message : String(error2)}`);
+    return config;
+  }
+}
+function parseBatchJobs(value) {
+  const parsed = JSON.parse(value);
+  if (!Array.isArray(parsed) || parsed.length === 0) throw new Error("jobs must be a non-empty JSON array");
+  return parsed.map((item) => {
+    if (!item || typeof item !== "object") throw new Error("each jobs entry must be an object");
+    const { job, alias } = item;
+    if (typeof job !== "string" || !job || typeof alias !== "string" || !/^[a-z_][a-z0-9_]*$/.test(alias)) {
+      throw new Error("each jobs entry requires a job and safe output alias");
+    }
+    return { job, alias };
+  });
+}
+function setLegacyOutputs(decision2) {
   setOutput("runs_on", decision2.runsOnJson);
   setOutput("label", decision2.label ?? "");
   setOutput("provider", decision2.provider);
   setOutput("runner", JSON.stringify(decision2.runner));
   setOutput("reason", decision2.reason);
-  logDecision(decision2);
-  if (config.defaults?.alerts?.github_warning && decision2.paidRequired) {
-    warning(`Freelane selected ${decision2.provider} outside configured free quota.`);
+}
+function setBatchOutputs(alias, decision2) {
+  setOutput(alias, decision2.label ?? "");
+  setOutput(`${alias}_runs_on`, decision2.runsOnJson);
+  setOutput(`${alias}_provider`, decision2.provider);
+  setOutput(`${alias}_reason`, decision2.reason);
+}
+function logBatch(decisions) {
+  startGroup("Freelane workflow plan");
+  for (const decision2 of decisions) {
+    info(`${decision2.job}: ${decision2.provider} ${decision2.runsOnJson} (${decision2.reason})`);
   }
-  if (config.defaults?.alerts?.github_summary !== false) {
-    await summary.addHeading("Freelane CI").addTable([
-      [{ data: "Job", header: true }, decision2.job],
-      [{ data: "Provider", header: true }, decision2.provider],
-      [{ data: "Runner", header: true }, decision2.runsOnJson],
-      [{ data: "Burn", header: true }, formatQuota(decision2.quotaBurn, decision2.quotaUnit)],
-      [{ data: "Available", header: true }, formatQuota(decision2.available, decision2.quotaUnit)],
-      [{ data: "Reason", header: true }, decision2.reason]
-    ]).write();
-  }
+  endGroup();
 }
 function logDecision(decision2) {
   startGroup("Freelane route");
@@ -34305,12 +34639,49 @@ function logDecision(decision2) {
   info(`Reason: ${decision2.reason}`);
   endGroup();
 }
+function warnIfPaid(config, decision2) {
+  if (config.defaults?.alerts?.github_warning && decision2.paidRequired) {
+    warning(`Freelane selected ${decision2.provider} outside configured free quota.`);
+  }
+}
+async function writeSummary(config, decisions) {
+  if (!decisions.length || config.defaults?.alerts?.github_summary === false) return;
+  await summary.addHeading("Freelane CI").addTable([
+    [
+      { data: "Job", header: true },
+      { data: "Provider", header: true },
+      { data: "Runner", header: true },
+      { data: "Burn", header: true },
+      { data: "Reason", header: true }
+    ],
+    ...decisions.map((decision2) => [
+      decision2.job,
+      decision2.provider,
+      decision2.runsOnJson,
+      formatQuota(decision2.quotaBurn, decision2.quotaUnit),
+      decision2.reason
+    ])
+  ]).write();
+}
+function positiveIntegerInput(name, fallback) {
+  const value = getInput(name);
+  if (!value) return fallback;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed <= 0) throw new Error(`${name} must be a positive integer`);
+  return parsed;
+}
 function formatQuota(value, unit) {
   if (unit === "unlimited") return "unlimited";
   return `${roundQuota(value)} ${displayUnit(unit)}`;
 }
-run().catch((error2) => {
-  setFailed(error2 instanceof Error ? error2.message : String(error2));
+if (process.env.NODE_ENV !== "test") {
+  run().catch((error2) => {
+    setFailed(error2 instanceof Error ? error2.message : String(error2));
+  });
+}
+// Annotate the CommonJS export names for ESM import in node:
+0 && (module.exports = {
+  run
 });
 /*! Bundled license information:
 

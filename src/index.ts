@@ -12,7 +12,15 @@ export {
   sanitizeOutputName,
   writeGitHubActionsWorkflow
 } from "./github-actions";
-export { collectGitHubUsage, formatGitHubUsageState, inferProvider, writeGitHubUsageState } from "./github-usage";
+export {
+  collectGitHubUsage,
+  formatGitHubUsageState,
+  inferProvider,
+  learnedEstimateMinutes,
+  writeGitHubUsageState,
+  type DurationEstimate,
+  type GitHubDurationEstimates
+} from "./github-usage";
 export { starterConfig, writeStarterConfig } from "./init";
 export { formatPlan, planFreelane } from "./plan";
 export { formatProviderList, listProviders } from "./provider-list";

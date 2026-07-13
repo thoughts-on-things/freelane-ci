@@ -5,7 +5,7 @@ network access, and logs.
 
 ## Current Design
 
-- The action reads repository config.
+- The action reads repository config and completed Actions job metadata.
 - The action emits a `runs-on` value.
 - The routed job runs on the selected provider.
 - No provider credentials are required for the first router implementation.
@@ -17,7 +17,8 @@ network access, and logs.
 - Use GitHub environments for sensitive deploy credentials.
 - Review provider terms, data location, and isolation guarantees.
 - Prefer pinned runner labels for sensitive workloads.
-- Give usage sync tokens Actions read permission only.
+- Give the router token Actions read permission only. Generated workflows pass
+  the scoped `${{ github.token }}` and do not require a stored secret.
 
 ## Non-Goals
 

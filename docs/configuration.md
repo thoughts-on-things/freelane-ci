@@ -26,7 +26,6 @@ jobs:
     os: linux
     arch: x64
     min_vcpu: 2
-    estimate_minutes: 8
     providers: [github, blacksmith]
 ```
 
@@ -49,6 +48,11 @@ Provider quota fields:
 - `free_credit_usd_per_month`
 - `unit_minutes_per_month`
 
+These values are routing budgets. Because the repository token can only observe
+this repository's job history, use an allocated share when provider credits are
+shared by several repositories in an organization. Exact cross-repository
+reservation requires an organization-level usage adapter.
+
 Optional local usage fields:
 
 - `used_minutes`
@@ -56,7 +60,8 @@ Optional local usage fields:
 - `used_unit_minutes`
 
 `freelane usage sync-github` can also write `.freelane-usage.json`; routing
-commands read it automatically when present.
+commands read it automatically when present. Generated GitHub workflows fetch
+the same history at runtime, so the state file is optional.
 
 Use `runner` to override Freelane's built-in runner label:
 
@@ -77,7 +82,7 @@ Optional:
 
 - `arch`: `x64` or `arm64`
 - `min_vcpu`
-- `estimate_minutes`
+- `estimate_minutes`: optional manual override; normally learned from Actions history
 - `providers`
 - `runner`
 

@@ -3,7 +3,7 @@ export { findConfigPath, loadConfig } from "./config";
 export { CONFIG_SCHEMA_URL } from "./constants";
 export { formatDecision } from "./format";
 export { DEFAULT_ACTION_REF, DEFAULT_WORKFLOW_OUTPUT, generateGitHubActionsWorkflow, githubActionsAliases, migrateGitHubActionsWorkflow, migrateGitHubActionsWorkflowContent, sanitizeOutputName, writeGitHubActionsWorkflow } from "./github-actions";
-export { collectGitHubUsage, formatGitHubUsageState, inferProvider, writeGitHubUsageState } from "./github-usage";
+export { collectGitHubUsage, formatGitHubUsageState, inferProvider, learnedEstimateMinutes, writeGitHubUsageState, type DurationEstimate, type GitHubDurationEstimates } from "./github-usage";
 export { starterConfig, writeStarterConfig } from "./init";
 export { formatPlan, planFreelane } from "./plan";
 export { formatProviderList, listProviders } from "./provider-list";

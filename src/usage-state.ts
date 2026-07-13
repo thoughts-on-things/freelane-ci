@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import type { GitHubUsageState } from "./github-usage";
+import { learnedEstimateMinutes, type GitHubUsageState } from "./github-usage";
 import { quotaUnitForProvider, roundQuota } from "./quota";
 import type { FreelaneConfig } from "./types";
 
@@ -25,7 +25,13 @@ export function applyUsageState(config: FreelaneConfig, state: GitHubUsageState)
   for (const [providerId, total] of Object.entries(state.providers)) {
     const provider = next.providers[providerId];
     if (!provider || quotaUnitForProvider(provider) !== "minutes") continue;
-    provider.used_minutes = roundQuota((provider.used_minutes ?? 0) + total.minutes);
+    provider.used_minutes = roundQuota(Math.max(provider.used_minutes ?? 0, total.minutes));
+  }
+
+  for (const [jobId, job] of Object.entries(next.jobs)) {
+    if (job.estimate_minutes !== undefined) continue;
+    const learned = learnedEstimateMinutes(jobId, job, state);
+    if (learned !== undefined) job.estimate_minutes = learned;
   }
 
   return next;

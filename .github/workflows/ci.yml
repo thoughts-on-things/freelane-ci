@@ -45,9 +45,10 @@ jobs:
         uses: ./
         with:
           config: examples/freelane.yml
-          job: test-linux
+          jobs: '[{"job":"test-linux","alias":"test_linux"}]'
+          sync_usage: false
       - name: Check action outputs
         run: |
-          test '${{ steps.route.outputs.provider }}' = 'github'
-          test '${{ steps.route.outputs.label }}' = 'ubuntu-latest'
-          test '${{ steps.route.outputs.runs_on }}' = '"ubuntu-latest"'
+          test '${{ steps.route.outputs.test_linux_provider }}' = 'github'
+          test '${{ steps.route.outputs.test_linux }}' = 'ubuntu-latest'
+          test '${{ steps.route.outputs.test_linux_runs_on }}' = '"ubuntu-latest"'

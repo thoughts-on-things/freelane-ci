@@ -1,4 +1,4 @@
-import type { GitHubUsageState } from "./github-usage";
+import { type GitHubUsageState } from "./github-usage";
 import type { FreelaneConfig } from "./types";
 export declare const DEFAULT_USAGE_STATE = ".freelane-usage.json";
 export interface UsageStateOptions {

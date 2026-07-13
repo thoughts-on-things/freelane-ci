@@ -3,8 +3,8 @@
 Freelane CI routes GitHub Actions jobs across runner providers so teams can use
 free credits first and switch providers with one config change.
 
-Status: early OSS starter. The CLI and action resolve configured providers; live
-provider usage APIs are still on the roadmap.
+Status: early OSS. Generated workflows learn job durations and repository usage
+from recent GitHub Actions history before reserving quota for the whole workflow.
 
 ## Why
 
@@ -67,7 +67,6 @@ jobs:
     os: linux
     arch: x64
     min_vcpu: 2
-    estimate_minutes: 8
     providers: [github, blacksmith, ubicloud]
 ```
 
@@ -94,14 +93,15 @@ jobs:
   freelane:
     runs-on: ubuntu-latest
     outputs:
-      test_linux: ${{ steps.test_linux.outputs.label }}
-      test_linux_runs_on: ${{ steps.test_linux.outputs.runs_on }}
+      test_linux: ${{ steps.route.outputs.test_linux }}
     steps:
       - uses: actions/checkout@v7
-      - id: test_linux
+      - id: route
         uses: thoughts-on-things/freelane-ci@v0
         with:
-          job: test-linux
+          jobs: '[{"job":"test-linux","alias":"test_linux"}]'
+          token: ${{ github.token }}
+          repository: ${{ github.repository }}
 
   test:
     needs: freelane

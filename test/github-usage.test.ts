@@ -57,6 +57,8 @@ describe("collectGitHubUsage", () => {
     expect(usage.jobCount).toBe(3);
     expect(usage.providers.blacksmith.minutes).toBe(205);
     expect(usage.providers.github.minutes).toBe(3.5);
+    expect(usage.estimates?.names["test-linux"]).toEqual({ samples: 1, p50: 8, p75: 8, p90: 8 });
+    expect(usage.estimates?.platforms["linux:arm64"]?.p75).toBe(8);
   });
 });
 

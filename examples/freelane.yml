@@ -38,7 +38,6 @@ jobs:
     os: linux
     arch: x64
     min_vcpu: 2
-    estimate_minutes: 8
     providers:
       - github
       - blacksmith
@@ -49,7 +48,6 @@ jobs:
     os: macos
     arch: arm64
     min_vcpu: 6
-    estimate_minutes: 12
     providers:
       - github
       - blacksmith

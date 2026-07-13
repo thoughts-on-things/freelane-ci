@@ -40,7 +40,6 @@ export function starterConfig(): string {
     "    os: linux",
     "    arch: x64",
     "    min_vcpu: 2",
-    "    estimate_minutes: 8",
     "    providers: [github, blacksmith, ubicloud, warpbuild]",
     ""
   ].join("\n");
