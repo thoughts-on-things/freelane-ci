@@ -19,7 +19,8 @@ export function getRunnerOption(
   job: JobConfig
 ): RunnerOption | undefined {
   if (provider.runner) {
-    return option(providerId, provider.runner, job.min_vcpu ?? 2, priceFor(providerId, job), job, quotaUnitForProvider(provider));
+    const vcpu = job.min_vcpu ?? 2;
+    return option(providerId, provider.runner, vcpu, priceFor(providerId, job.os, job.arch ?? "x64", vcpu), job, quotaUnitForProvider(provider));
   }
 
   const factory = providerFactories[providerId];
@@ -39,17 +40,17 @@ function blacksmithRunner(provider: ProviderConfig, job: JobConfig): RunnerOptio
   const quotaUnit = quotaUnitForProvider(provider);
 
   if (job.os === "linux" && arch === "x64") {
-    return option("blacksmith", `blacksmith-${vcpu}vcpu-ubuntu-2404`, vcpu, priceFor("blacksmith", job), job, quotaUnit);
+    return option("blacksmith", `blacksmith-${vcpu}vcpu-ubuntu-2404`, vcpu, priceFor("blacksmith", job.os, arch, vcpu), job, quotaUnit);
   }
   if (job.os === "linux" && arch === "arm64") {
-    return option("blacksmith", `blacksmith-${vcpu}vcpu-ubuntu-2404-arm`, vcpu, priceFor("blacksmith", job), job, quotaUnit);
+    return option("blacksmith", `blacksmith-${vcpu}vcpu-ubuntu-2404-arm`, vcpu, priceFor("blacksmith", job.os, arch, vcpu), job, quotaUnit);
   }
   if (job.os === "windows" && arch === "x64") {
-    return option("blacksmith", `blacksmith-${vcpu}vcpu-windows-2025`, vcpu, priceFor("blacksmith", job), job, quotaUnit);
+    return option("blacksmith", `blacksmith-${vcpu}vcpu-windows-2025`, vcpu, priceFor("blacksmith", job.os, arch, vcpu), job, quotaUnit);
   }
   if (job.os === "macos" && arch === "arm64") {
     const macVcpu = job.min_vcpu && job.min_vcpu > 6 ? 12 : 6;
-    return option("blacksmith", `blacksmith-${macVcpu}vcpu-macos-15`, macVcpu, priceFor("blacksmith", job), job, quotaUnit);
+    return option("blacksmith", `blacksmith-${macVcpu}vcpu-macos-15`, macVcpu, priceFor("blacksmith", job.os, arch, macVcpu), job, quotaUnit);
   }
   return undefined;
 }
@@ -61,9 +62,9 @@ function ubicloudRunner(provider: ProviderConfig, job: JobConfig): RunnerOption 
 
   if (job.os !== "linux") return undefined;
   if (arch === "x64") {
-    return option("ubicloud", `ubicloud-standard-${vcpu}`, vcpu, priceFor("ubicloud", job), job, quotaUnit);
+    return option("ubicloud", `ubicloud-standard-${vcpu}`, vcpu, priceFor("ubicloud", job.os, arch, vcpu), job, quotaUnit);
   }
-  return option("ubicloud", `ubicloud-standard-${vcpu}-arm`, vcpu, priceFor("ubicloud", job), job, quotaUnit);
+  return option("ubicloud", `ubicloud-standard-${vcpu}-arm`, vcpu, priceFor("ubicloud", job.os, arch, vcpu), job, quotaUnit);
 }
 
 function warpbuildRunner(provider: ProviderConfig, job: JobConfig): RunnerOption | undefined {
@@ -72,15 +73,15 @@ function warpbuildRunner(provider: ProviderConfig, job: JobConfig): RunnerOption
   const quotaUnit = quotaUnitForProvider(provider);
 
   if (job.os === "linux") {
-    return option("warpbuild", `warp-ubuntu-latest-${arch}-${vcpu}x`, vcpu, priceFor("warpbuild", job), job, quotaUnit);
+    return option("warpbuild", `warp-ubuntu-latest-${arch}-${vcpu}x`, vcpu, priceFor("warpbuild", job.os, arch, vcpu), job, quotaUnit);
   }
   if (job.os === "windows" && arch === "x64") {
     const winVcpu = nearestVcpu(job.min_vcpu, [4, 8, 16, 32]);
-    return option("warpbuild", `warp-windows-latest-x64-${winVcpu}x`, winVcpu, priceFor("warpbuild", job), job, quotaUnit);
+    return option("warpbuild", `warp-windows-latest-x64-${winVcpu}x`, winVcpu, priceFor("warpbuild", job.os, arch, winVcpu), job, quotaUnit);
   }
   if (job.os === "macos" && arch === "arm64") {
     const macVcpu = job.min_vcpu && job.min_vcpu > 6 ? 12 : 6;
-    return option("warpbuild", `warp-macos-latest-arm64-${macVcpu}x`, macVcpu, priceFor("warpbuild", job), job, quotaUnit);
+    return option("warpbuild", `warp-macos-latest-arm64-${macVcpu}x`, macVcpu, priceFor("warpbuild", job.os, arch, macVcpu), job, quotaUnit);
   }
   return undefined;
 }
@@ -133,21 +134,26 @@ function platformMultiplier(os: RunnerOs): number {
   return 1;
 }
 
-function priceFor(provider: string, job: JobConfig): number | undefined {
-  const arch = job.arch ?? "x64";
+// USD per minute. Base rates are for 2 vCPU (6 vCPU on macOS); larger sizes scale linearly.
+function priceFor(provider: string, os: RunnerOs, arch: string, vcpu: number): number | undefined {
+  const base = basePriceFor(provider, os, arch);
+  return base === undefined ? undefined : base * vcpu / (os === "macos" ? 6 : 2);
+}
+
+function basePriceFor(provider: string, os: RunnerOs, arch: string): number | undefined {
   if (provider === "blacksmith") {
-    if (job.os === "linux" && arch === "arm64") return 0.0025;
-    if (job.os === "windows") return 0.008;
-    if (job.os === "macos") return 0.08;
+    if (os === "linux" && arch === "arm64") return 0.0025;
+    if (os === "windows") return 0.008;
+    if (os === "macos") return 0.08;
     return 0.004;
   }
   if (provider === "ubicloud") {
-    return arch === "arm64" ? 0.001 : 0.0016;
+    return 0.00125;
   }
   if (provider === "warpbuild") {
-    if (job.os === "linux" && arch === "arm64") return 0.003;
-    if (job.os === "windows") return 0.008;
-    if (job.os === "macos") return 0.08;
+    if (os === "linux" && arch === "arm64") return 0.003;
+    if (os === "windows") return 0.008;
+    if (os === "macos") return 0.08;
     return 0.004;
   }
   return undefined;

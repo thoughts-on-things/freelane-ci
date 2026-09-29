@@ -127,6 +127,21 @@ describe("resolveFreelane", () => {
     expect(resolveFreelane(config, "macos").quotaBurn).toBe(200);
   });
 
+  it("scales USD credit burn with runner size", () => {
+    const jobs: FreelaneConfig["jobs"] = {
+      small: { os: "linux", arch: "x64", min_vcpu: 2, estimate_minutes: 10, providers: ["ubicloud"] },
+      large: { os: "linux", arch: "arm64", min_vcpu: 8, estimate_minutes: 10, providers: ["ubicloud"] },
+      windows: { os: "windows", arch: "x64", min_vcpu: 2, estimate_minutes: 10, providers: ["warpbuild"] },
+      macos: { os: "macos", arch: "arm64", min_vcpu: 12, estimate_minutes: 10, providers: ["warpbuild"] }
+    };
+    const config: FreelaneConfig = { ...baseConfig, jobs };
+
+    expect(resolveFreelane(config, "small").quotaBurn).toBe(0.0125);
+    expect(resolveFreelane(config, "large").quotaBurn).toBe(0.05);
+    expect(resolveFreelane(config, "windows").quotaBurn).toBe(0.16);
+    expect(resolveFreelane(config, "macos").quotaBurn).toBe(1.6);
+  });
+
   it("honors job-level runner overrides", () => {
     const config: FreelaneConfig = {
       ...baseConfig,
