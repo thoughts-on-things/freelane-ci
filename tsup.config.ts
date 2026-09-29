@@ -3,7 +3,7 @@ import { defineConfig } from "tsup";
 const common = {
   format: ["cjs"] as const,
   platform: "node" as const,
-  target: "node20",
+  target: "node22",
   clean: false
 };
 
