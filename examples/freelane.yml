@@ -23,11 +23,11 @@ providers:
 
   ubicloud:
     enabled: true
-    free_credit_usd_per_month: 2
+    free_credit_usd_per_month: 2.5
 
   warpbuild:
     enabled: true
-    free_credit_usd_per_month: 10
+    free_credit_usd_per_month: 0
 
   namespace:
     enabled: false

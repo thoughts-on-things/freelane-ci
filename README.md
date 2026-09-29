@@ -60,7 +60,7 @@ providers:
     free_minutes_per_month: 3000
   ubicloud:
     enabled: true
-    free_credit_usd_per_month: 2
+    free_credit_usd_per_month: 2.5
 
 jobs:
   test-linux:

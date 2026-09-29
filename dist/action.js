@@ -34651,7 +34651,8 @@ var providerFactories = {
 };
 function getRunnerOption(providerId, provider, job) {
   if (provider.runner) {
-    return option(providerId, provider.runner, job.min_vcpu ?? 2, priceFor(providerId, job), job, quotaUnitForProvider(provider));
+    const vcpu = job.min_vcpu ?? 2;
+    return option(providerId, provider.runner, vcpu, priceFor(providerId, job.os, job.arch ?? "x64", vcpu), job, quotaUnitForProvider(provider));
   }
   const factory = providerFactories[providerId];
   return factory?.(provider, job);
@@ -34667,17 +34668,17 @@ function blacksmithRunner(provider, job) {
   const vcpu = nearestVcpu(job.min_vcpu);
   const quotaUnit = quotaUnitForProvider(provider);
   if (job.os === "linux" && arch2 === "x64") {
-    return option("blacksmith", `blacksmith-${vcpu}vcpu-ubuntu-2404`, vcpu, priceFor("blacksmith", job), job, quotaUnit);
+    return option("blacksmith", `blacksmith-${vcpu}vcpu-ubuntu-2404`, vcpu, priceFor("blacksmith", job.os, arch2, vcpu), job, quotaUnit);
   }
   if (job.os === "linux" && arch2 === "arm64") {
-    return option("blacksmith", `blacksmith-${vcpu}vcpu-ubuntu-2404-arm`, vcpu, priceFor("blacksmith", job), job, quotaUnit);
+    return option("blacksmith", `blacksmith-${vcpu}vcpu-ubuntu-2404-arm`, vcpu, priceFor("blacksmith", job.os, arch2, vcpu), job, quotaUnit);
   }
   if (job.os === "windows" && arch2 === "x64") {
-    return option("blacksmith", `blacksmith-${vcpu}vcpu-windows-2025`, vcpu, priceFor("blacksmith", job), job, quotaUnit);
+    return option("blacksmith", `blacksmith-${vcpu}vcpu-windows-2025`, vcpu, priceFor("blacksmith", job.os, arch2, vcpu), job, quotaUnit);
   }
   if (job.os === "macos" && arch2 === "arm64") {
     const macVcpu = job.min_vcpu && job.min_vcpu > 6 ? 12 : 6;
-    return option("blacksmith", `blacksmith-${macVcpu}vcpu-macos-15`, macVcpu, priceFor("blacksmith", job), job, quotaUnit);
+    return option("blacksmith", `blacksmith-${macVcpu}vcpu-macos-15`, macVcpu, priceFor("blacksmith", job.os, arch2, macVcpu), job, quotaUnit);
   }
   return void 0;
 }
@@ -34687,24 +34688,24 @@ function ubicloudRunner(provider, job) {
   const quotaUnit = quotaUnitForProvider(provider);
   if (job.os !== "linux") return void 0;
   if (arch2 === "x64") {
-    return option("ubicloud", `ubicloud-standard-${vcpu}`, vcpu, priceFor("ubicloud", job), job, quotaUnit);
+    return option("ubicloud", `ubicloud-standard-${vcpu}`, vcpu, priceFor("ubicloud", job.os, arch2, vcpu), job, quotaUnit);
   }
-  return option("ubicloud", `ubicloud-standard-${vcpu}-arm`, vcpu, priceFor("ubicloud", job), job, quotaUnit);
+  return option("ubicloud", `ubicloud-standard-${vcpu}-arm`, vcpu, priceFor("ubicloud", job.os, arch2, vcpu), job, quotaUnit);
 }
 function warpbuildRunner(provider, job) {
   const arch2 = job.arch ?? "x64";
   const vcpu = nearestVcpu(job.min_vcpu);
   const quotaUnit = quotaUnitForProvider(provider);
   if (job.os === "linux") {
-    return option("warpbuild", `warp-ubuntu-latest-${arch2}-${vcpu}x`, vcpu, priceFor("warpbuild", job), job, quotaUnit);
+    return option("warpbuild", `warp-ubuntu-latest-${arch2}-${vcpu}x`, vcpu, priceFor("warpbuild", job.os, arch2, vcpu), job, quotaUnit);
   }
   if (job.os === "windows" && arch2 === "x64") {
     const winVcpu = nearestVcpu(job.min_vcpu, [4, 8, 16, 32]);
-    return option("warpbuild", `warp-windows-latest-x64-${winVcpu}x`, winVcpu, priceFor("warpbuild", job), job, quotaUnit);
+    return option("warpbuild", `warp-windows-latest-x64-${winVcpu}x`, winVcpu, priceFor("warpbuild", job.os, arch2, winVcpu), job, quotaUnit);
   }
   if (job.os === "macos" && arch2 === "arm64") {
     const macVcpu = job.min_vcpu && job.min_vcpu > 6 ? 12 : 6;
-    return option("warpbuild", `warp-macos-latest-arm64-${macVcpu}x`, macVcpu, priceFor("warpbuild", job), job, quotaUnit);
+    return option("warpbuild", `warp-macos-latest-arm64-${macVcpu}x`, macVcpu, priceFor("warpbuild", job.os, arch2, macVcpu), job, quotaUnit);
   }
   return void 0;
 }
@@ -34742,21 +34743,24 @@ function platformMultiplier(os5) {
   if (os5 === "macos") return 10;
   return 1;
 }
-function priceFor(provider, job) {
-  const arch2 = job.arch ?? "x64";
+function priceFor(provider, os5, arch2, vcpu) {
+  const base = basePriceFor(provider, os5, arch2);
+  return base === void 0 ? void 0 : base * vcpu / (os5 === "macos" ? 6 : 2);
+}
+function basePriceFor(provider, os5, arch2) {
   if (provider === "blacksmith") {
-    if (job.os === "linux" && arch2 === "arm64") return 25e-4;
-    if (job.os === "windows") return 8e-3;
-    if (job.os === "macos") return 0.08;
+    if (os5 === "linux" && arch2 === "arm64") return 25e-4;
+    if (os5 === "windows") return 8e-3;
+    if (os5 === "macos") return 0.08;
     return 4e-3;
   }
   if (provider === "ubicloud") {
-    return arch2 === "arm64" ? 1e-3 : 16e-4;
+    return 125e-5;
   }
   if (provider === "warpbuild") {
-    if (job.os === "linux" && arch2 === "arm64") return 3e-3;
-    if (job.os === "windows") return 8e-3;
-    if (job.os === "macos") return 0.08;
+    if (os5 === "linux" && arch2 === "arm64") return 3e-3;
+    if (os5 === "windows") return 8e-3;
+    if (os5 === "macos") return 0.08;
     return 4e-3;
   }
   return void 0;
