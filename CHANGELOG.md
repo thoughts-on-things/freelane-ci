@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.6.0](https://github.com/thoughts-on-things/freelane-ci/compare/v0.5.0...v0.6.0) (2026-09-29)
+
+
+### ⚠ BREAKING CHANGES
+
+* **deps:** update to latest toolchain and provider pricing ([#25](https://github.com/thoughts-on-things/freelane-ci/issues/25))
+
+### Build System
+
+* **deps:** update to latest toolchain and provider pricing ([#25](https://github.com/thoughts-on-things/freelane-ci/issues/25)) ([5513b7d](https://github.com/thoughts-on-things/freelane-ci/commit/5513b7d5fb6f9c49a00291dacbdf974f6d3eff74))
+
 ## [0.5.0](https://github.com/thoughts-on-things/freelane-ci/compare/v0.4.0...v0.5.0) (2026-07-13)
 
 
